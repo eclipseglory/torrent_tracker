@@ -1,0 +1,18 @@
+name: torrent_discover
+description: A starting point for Dart libraries or applications.
+# version: 1.0.0
+# homepage: https://www.example.com
+
+environment:
+  sdk: '>=2.10.0 <3.0.0'
+
+dependencies:
+  async: ^2.4.2
+
+dev_dependencies:
+  pedantic: ^1.9.0
+  test: ^1.14.4
+  torrent_parser :
+    path : ../torrent_parser
+  bencode_dart:
+    path : ../bencode
