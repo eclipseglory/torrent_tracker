@@ -15,7 +15,7 @@ void main() async {
   var idbytes = utf8.encode(id);
   var discover = PeerDiscover('id', torrent, id, 55551, 0, 0);
   var stream = discover.start();
-  stream.listen((event) {
+  var listen = stream.listen((event) {
     // print(event);
   }, onError: (e) {
     // print(e);

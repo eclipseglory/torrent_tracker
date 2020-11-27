@@ -100,6 +100,15 @@ class HttpTracker extends Tracker with HttpTrackerBase {
     return params;
   }
 
+  ///
+  /// Decode the return bytebuffer with bencoder.
+  ///
+  /// - Get the 'interval' value , and make sure the return Map contains it(or null), because the Tracker
+  /// will check the return Map , if it has 'interval' value , Tracker will update the interval timer.
+  /// - If it has 'tracker id' , need to store it , use it next time.
+  /// - parse 'peers' informations. the peers usually is a List<int> , need to parse it to 'n.n.n.n:p' formate
+  /// ip address.
+  /// - Sometimes , the remote will return 'failer reason', then need to throw a exception
   @override
   dynamic processResponseData(Uint8List data) {
     var result = decode(data) as Map;

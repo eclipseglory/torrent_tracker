@@ -8,7 +8,6 @@ import '../utils.dart';
 import 'tracker.dart';
 
 class UDPTracker extends Tracker with UDPTrackerBase {
-  // final Uri _uri;
   String _currentEvent;
   UDPTracker(Uri _uri, String peerId, Uint8List hashInfoBuffer, int port,
       {int downloaded,

@@ -4,11 +4,56 @@ import 'dart:io';
 
 import 'dart:typed_data';
 
+///
+/// Because access announce or scrape url , the access workflow is the same , but different url
+/// with diffrent query string. So this class implement the http access announce main processes,
+/// such as connect , catch error , close client and so on.
+///
+/// The classes witch [with] this mixin , need to implement ```generateQueryParameters``` method, ```url``` property
+/// ```processResponseData``` method.
+/// - ```generateQueryParameters``` return the query parameters map , this class will make them to be the query string
+/// - ```url``` the announce or scrape url
+/// - ```processResponseData``` deal with the response byte buffer , and return the useful informations from announce.
+///
+///
+/// Invoke ```httpGet``` method to start access remote , see HttpTracker:
+///
+/// ```dart
+///    @override
+///    Future announce(String event) {
+///      _currentEvent = event;
+///      return httpGet();
+///    }
+///
+/// ```
+///
+/// It record the event type and invoke httpGet directly to access remove. of course , it has implemented the abstract method and
+/// property of this mixin.
+///
+///
 mixin HttpTrackerBase {
   HttpClient _httpClient;
 
+  /// Return a map with query params.
+  /// 
+  /// *NOTE* 
+  /// 
+  /// The param map's key is the query pair'key , it allow the duplicated key:
+  /// 
+  /// `http://some.com?key=value1&key=value2`
+  /// 
+  /// so , the param map's value is not `String` type but `dynamic`, because it can be a `List`.
+  /// If the value is `List` , the query string will be generated with duplicate key :
+  /// ```dart
+  ///   var map = <String,List>{};
+  ///   var list = ['Sam','Bob'];
+  ///   map['name'] = list;
+  ///   return map;
+  /// ```
+  /// Then access url with the query string will be : `http://remoteurl?name=Sam&name=Bob`
   Map<String, dynamic> generateQueryParameters();
 
+  /// Return the remote Url
   Uri get url;
 
   /// 创建访问URL。
@@ -47,6 +92,8 @@ mixin HttpTrackerBase {
     return str;
   }
 
+  ///
+  /// close the http client
   void clean() {
     _httpClient?.close(force: true);
     _httpClient = null;
@@ -101,5 +148,6 @@ mixin HttpTrackerBase {
     return completer.future;
   }
 
+  /// Process the remote response byte buffer and return the useful informations they need.
   dynamic processResponseData(Uint8List data);
 }
