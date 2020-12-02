@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 ///
 /// Torrent Scrape class.
 ///
@@ -5,12 +7,12 @@
 /// such as downloaded,completed,incompleted , this class provide some interface
 /// to access the announce with scrape method.
 abstract class Scrape {
-  final Set _infoHashList = {};
+  final Set<Uint8List> _infoHashList = {};
 
   /// Scrape Url
   Uri scrapeUrl;
 
-  /// Scrape Id
+  /// Scrape Tracker Id , usually use scrape url
   final String id;
 
   Scrape(this.id, this.scrapeUrl);
@@ -19,25 +21,34 @@ abstract class Scrape {
   /// Call this method , client will access the scrape url to get the scrape informations.
   /// It return a Future , if success , it will return the informations include downloaded,
   /// completed , incompleted and other unofficial informations.
-  Future scrape();
+  Future scrape(Map<String, dynamic> options);
 
   ///
-  /// Torrent file infomations hash string set.
+  /// Torrent file infomations hash bytebuffer set.
   ///
   /// the announce scrape allow client to get mutiple torrent file informations , this property
-  ///  store the torrent files info hash string.
+  ///  store the torrent files info hash bytebuffer.
   ///
-  Set get infoHashSet {
+  Set<Uint8List> get infoHashSet {
     return _infoHashList;
   }
 
-  /// Add a torrent file info hash string. if it existed , this method will return false, or return true
-  bool addInfoHash(String infoHash) {
-    return _infoHashList.add(infoHash);
+  /// Add a torrent file info hash bytebuffer. if it existed , this method will return false, or return true
+  bool addInfoHash(Uint8List infoHashBuffer) {
+    return _infoHashList.add(infoHashBuffer);
   }
 
-  /// Remove a torrent file info hash string. if it inst existed, will return false, or return true;
-  bool removeInfoHash(String infoHash) {
-    return _infoHashList.remove(infoHash);
+  /// Remove a torrent file info hash bytebuffer. if it inst existed, will return false, or return true;
+  bool removeInfoHash(Uint8List infoHashBuffer) {
+    return _infoHashList.remove(infoHashBuffer);
   }
+
+  @override
+  bool operator ==(b) {
+    if (b is Scrape) return b.id == id;
+    return this == b;
+  }
+
+  @override
+  int get hashCode => id.hashCode;
 }

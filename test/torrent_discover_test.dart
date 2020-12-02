@@ -1,4 +1,4 @@
-import 'package:torrent_discover/torrent_discover.dart';
+import 'package:torrent_tracker/torrent_tracker.dart';
 import 'package:test/test.dart';
 
 void main() {

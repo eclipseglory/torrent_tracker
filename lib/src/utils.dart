@@ -11,6 +11,17 @@ Uint8List randomBytes(count) {
   return bytes;
 }
 
+///
+/// Transform buffer to hex string
+String transformBufferToHexString(List<int> buffer) {
+  var str = buffer.fold<String>('', (previousValue, byte) {
+    var hex = byte.toRadixString(16);
+    if (hex.length != 2) hex = '0' + hex;
+    return previousValue + hex;
+  });
+  return str;
+}
+
 String transformToScrapeUrl(String url) {
   var lastIndex = url.lastIndexOf('/');
   if (lastIndex == -1) {
@@ -54,20 +65,14 @@ Uint8List num2Uint64List(n) {
   return buffer.asUint8List();
 }
 
-Future udpSendMessageToHost(
-    RawDatagramSocket socket, String host, int port, Uint8List message) async {
-  var ipList = await InternetAddress.lookup(host);
-  if (ipList == null || ipList.isEmpty) return;
-  return ipList.map((ip) => socket.send(message, ip, port));
-}
-
 dynamic getPeerIPv4(ByteData byteView, [int offset = 0]) {
   var a = byteView.getUint8(offset);
   var b = byteView.getUint8(offset + 1);
   var c = byteView.getUint8(offset + 2);
   var d = byteView.getUint8(offset + 3);
   var port = byteView.getUint16(offset + 4);
-  return {'ip': '$a.$b.$c.$d', 'port': port};
+  return Uri(host: '$a.$b.$c.$d', port: port);
+  // return {'ip': '$a.$b.$c.$d', 'port': port};
   // switch (bytes.length) {
   //   case 6:
   //     return buf[0] +

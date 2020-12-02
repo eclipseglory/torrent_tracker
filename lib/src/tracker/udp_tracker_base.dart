@@ -1,8 +1,9 @@
 import 'dart:async';
-import 'dart:developer';
 import 'dart:io';
 
 import 'dart:typed_data';
+
+import 'tracker_exception.dart';
 
 import '../utils.dart';
 
@@ -56,12 +57,16 @@ mixin UDPTrackerBase {
     return randomBytes(4);
   }
 
+  String get _rawUrl {
+    return 'udp://${uri.host}:${uri.port}';
+  }
+
   /// 与Remote通讯的第一次连接
   ///
   /// Announce 和 Scrape通讯的时候，都必须要走这第一步，是固定的。
   ///
   /// 参数completer是一个`Completer`实例。用于截获发生的异常，并通过completeError截获
-  void _connect(Completer completer) {
+  void _connect(Completer completer, Map options) {
     var uri = this.uri;
     if (uri == null) _returnError(completer, '目标地址Uri不能为空');
     var list = <int>[];
@@ -82,15 +87,16 @@ mixin UDPTrackerBase {
   }
 
   /// 和Remote通信的入口函数。返回一个Future
-  Future contactAnnouncer() async {
-    var completer = Completer();
+  Future<T> contactAnnouncer<T>(Map options) async {
+    var completer = Completer<T>();
     _socket?.close();
     _socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
 
     var eventStream = _socket.timeout(TIME_OUT, onTimeout: (e) {
       _clean();
-      log('连接 $uri 超时', error: '超时', name: runtimeType.toString());
-      if (!completer.isCompleted) completer.completeError('连接超时');
+      if (!completer.isCompleted) {
+        completer.completeError(SocketException('Time Out'));
+      }
     });
 
     eventStream.listen((event) {
@@ -101,7 +107,7 @@ mixin UDPTrackerBase {
           completer.completeError('Transaction ID from tracker is wrong');
           return;
         }
-        _processAnnounceResponseData(datagram.data, completer);
+        _processAnnounceResponseData(datagram.data, completer, options);
       }
     }, onError: (e) {
       _clean();
@@ -110,28 +116,28 @@ mixin UDPTrackerBase {
 
     // 第一步，连接对方
     try {
-      _connect(completer);
+      _connect(completer, options);
     } catch (e) {
       _clean();
-      completer.completeError(e);
-      return;
+      if (!completer.isCompleted) completer.completeError(e);
+      return completer.future;
     }
     return completer.future;
   }
 
   /// 处理一次通信最终从remote获得的数据.
-  /// 
+  ///
   dynamic processResponseData(Uint8List data, int action);
 
   ///
   /// 与announce和scrape通信的时候，在第一次连接成功后，第二次发送的数据是不同的。
   /// 这个方法就是让子类分别实现annouce和scrape不同的发送数据
-  Uint8List generateSecondTouchMessage(Uint8List connectionId);
+  Uint8List generateSecondTouchMessage(Uint8List connectionId, Map options);
 
   ///
   /// 第一次连接成功后，发送第二次信息
-  void _announce(Completer completer, Uint8List connectionId) {
-    var message = generateSecondTouchMessage(connectionId);
+  void _announce(Completer completer, Uint8List connectionId, Map options) {
+    var message = generateSecondTouchMessage(connectionId, options);
     var uri = this.uri;
     if (uri == null) _returnError(completer, '目标地址Uri不能为空');
     if (message == null || message.isEmpty) {
@@ -147,7 +153,8 @@ mixin UDPTrackerBase {
   ///
   /// 该方法并不会直接去处理Remote返回的最终消息，而且固定了整个通信流程。
   /// 该方法会去处理在第一次发送信息后收到消息，然后到接收到第二次消息的整个过程
-  void _processAnnounceResponseData(Uint8List data, Completer completer) {
+  void _processAnnounceResponseData(
+      Uint8List data, Completer completer, Map options) {
     var view = ByteData.view(data.buffer);
     var tid = view.getUint32(4);
     if (tid == transcationIdNum) {
@@ -157,12 +164,10 @@ mixin UDPTrackerBase {
         // print('$announceUrl connect success , ready to announce');
         try {
           _connectionId = data.sublist(8, 16); // 返回信息的第8-16位是下次连接的connection id
-          _announce(completer, _connectionId); // 继续，不要停
+          _announce(completer, _connectionId, options); // 继续，不要停
         } catch (e) {
           _clean();
-          log('在发送给announcer消息的时候出错', error: e, name: runtimeType.toString());
-          completer.completeError(
-              'error happens during announce , from ${uri.host}');
+          completer.completeError(e);
         }
         return;
       }
@@ -170,8 +175,6 @@ mixin UDPTrackerBase {
       if (action == 3) {
         _clean();
         var errorMsg = String.fromCharCodes(data.sublist(8));
-        log('获得announcer的错误返回信息',
-            error: errorMsg, name: runtimeType.toString());
         completer.completeError(errorMsg);
         return;
       }
@@ -183,12 +186,10 @@ mixin UDPTrackerBase {
       try {
         result = processResponseData(data, action);
       } catch (e) {
-        completer.completeError('处理数据时发生错误 $e');
+        completer.completeError(e);
         return;
       }
       completer.complete(result);
-      log('Action : $action ,成功获得announcer数据 : $result',
-          name: runtimeType.toString());
       return;
     }
   }

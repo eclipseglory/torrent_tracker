@@ -1,4 +1,10 @@
 import 'dart:async';
+import 'dart:math';
+
+import 'dart:typed_data';
+
+import 'peer_event.dart';
+import 'tracker_exception.dart';
 
 const EVENT_STARTED = 'started';
 const EVENT_UPDATE = 'update';
@@ -10,17 +16,18 @@ const EVENT_STOPPED = 'stopped';
 ///
 /// ```
 abstract class Tracker {
+  /// Tracker ID , usually use server host url to be its id.
   final String id;
-  int port;
-  dynamic hashInfo;
-  final String peerId;
+
+  /// Torrent file info hash bytebuffer
+  final Uint8List infoHashBuffer;
+
+  /// Torrent file info hash string
+  String _infoHash;
+
+  /// server url;
   final Uri announceUrl;
-  int downloaded;
-  int left;
-  int uploaded;
-  int compact;
-  bool _stopped = false;
-  int numwant;
+  bool _stopped = true;
 
   /// 循环访问announce url的间隔时间，单位秒，默认值30分钟
   int _announceInterval = 30 * 60; // 30 minites
@@ -32,15 +39,33 @@ abstract class Tracker {
 
   Timer _announceTimer;
 
-  Tracker(this.id, this.announceUrl, this.peerId, this.hashInfo, this.port,
-      {this.downloaded, this.left, this.uploaded, this.compact, this.numwant});
+  AnnounceOptionsProvider provider;
+
+  Tracker(this.id, this.announceUrl, this.infoHashBuffer, {this.provider}) {
+    assert(id != null, 'id cant be null');
+    assert(announceUrl != null, 'announce url cant be null');
+    assert(infoHashBuffer != null && infoHashBuffer.isNotEmpty,
+        'info buffer cant be null or empty');
+  }
+
+  /// Torrent file info hash string
+  String get infoHash {
+    _infoHash ??= infoHashBuffer.fold('', (previousValue, byte) {
+      var s = byte.toRadixString(16);
+      if (s.length != 2) s = '0$s';
+      return previousValue + s;
+    });
+    return _infoHash;
+  }
 
   ///
   /// 开始循环发起announce访问。
   ///
-  /// 返回一个Stream，调用者可以利用listen方法监听返回结果以及发生的错误
+  /// 返回一个Stream，调用者可以利用listen方法监听返回结果以及发生的错误,
+  /// 如果该Tracker已经处于开始状态，返回false
   ///
   Stream start() {
+    if (!_stopped) return Stream.value(false);
     _stopped = false;
     _announceSC?.close();
     _announceSC = StreamController();
@@ -63,13 +88,29 @@ abstract class Tracker {
       }
       var result;
       try {
-        result = await announce(event);
+        result = await announce(event, await _announceOptions);
         sc.add(result);
       } catch (e) {
-        sc.addError(e);
+        sc.addError(TrackerException(infoHash, e));
       }
       var interval;
-      if (result != null) interval = result['interval'];
+      if (result != null && result is PeerEvent) {
+        var inter = result.interval;
+        var minInter = result.minInterval;
+        if (inter == null) {
+          interval = minInter;
+        } else {
+          if (minInter != null) {
+            interval = min(inter, minInter);
+          } else {
+            interval = inter;
+          }
+        }
+      }
+      // debug:
+      // if(announceUrl.host == 'tracker.gbitt.info'){
+      //   print('here');
+      // }
       interval ??= _announceInterval;
       if (timer == null || interval != _announceInterval) {
         timer?.cancel();
@@ -80,9 +121,24 @@ abstract class Tracker {
         return;
       }
     } catch (e) {
-      sc.addError(e);
+      sc.addError(TrackerException(infoHash, e));
     }
     return;
+  }
+
+  Future<Map<String, dynamic>> get _announceOptions async {
+    var options = <String, dynamic>{
+      'downloaded': 0,
+      'uploaded': 0,
+      'left': 0,
+      'compact': 1,
+      'numwant': 50
+    };
+    if (provider != null) {
+      var opt = await provider.getOptions(announceUrl, infoHash);
+      if (opt != null && opt.isNotEmpty) options = opt;
+    }
+    return options;
   }
 
   void _clean() {
@@ -92,23 +148,31 @@ abstract class Tracker {
   }
 
   ///
-  /// 当突然停止需要调用该方法去通知announce。
+  /// 当突然停止需要调用该方法去通知`announce`。
   ///
-  /// 该方法会调用一次announce，参数位stopped。
-  Future stop() {
+  /// 该方法会调用一次`announce`，参数位`stopped`。
+  ///
+  /// [force] 是强制关闭标识，默认值为`false`。 如果为`true`，刚方法不会去调用`announce`方法
+  /// 发送`stopped`请求，而是直接返回一个`true`
+  Future stop([bool force = false]) async {
+    if (_stopped) return Future.value(false);
     _clean();
     _stopped = true;
-    return announce(EVENT_STOPPED);
+    if (force) {
+      return Future.value(true);
+    }
+    return announce(EVENT_STOPPED, await _announceOptions);
   }
 
   ///
   /// 当完成下载后需要调用该方法去通知announce。
   ///
   /// 该方法会调用一次announce，参数位completed。该方法和stop是独立两个方法，如果需要释放资源等善后工作，子类必须复写该方法
-  Future complete() {
+  Future complete() async {
+    if (_stopped) return Future.value(false);
     _clean();
     _stopped = true;
-    return announce(EVENT_COMPLETED);
+    return announce(EVENT_COMPLETED, await _announceOptions);
   }
 
   ///
@@ -117,9 +181,16 @@ abstract class Tracker {
   /// 调用方法即可开始一次对Announce Url的访问，返回是一个Future，如果成功，则返回正常数据，如果访问过程中
   /// 有任何失败，比如解码失败、访问超时等，都会抛出异常。
   /// 参数eventType必须是started,stopped,completed中的一个，可以是null。
-  Future announce(String eventType);
+  ///
+  /// 返回的数据应该是一个[PeerEvent]对象。如果该对象interval属性值不为空，并且该属性值和当前的循环间隔时间
+  /// 不同，那么Tracker就会停止当前的Timer并重新创建一个Timer，间隔时间设置为返回对象中的interval值
+  Future<PeerEvent> announce(String eventType, Map<String, dynamic> options);
 
   bool get isStopped {
     return _stopped;
   }
+}
+
+abstract class AnnounceOptionsProvider {
+  Future<Map<String, dynamic>> getOptions(Uri uri, String infoHash);
 }

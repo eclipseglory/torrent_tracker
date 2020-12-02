@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:developer';
-import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'package:bencode_dart/bencode.dart';
+import 'package:bencode_dart/bencode_dart.dart';
+import 'peer_event.dart';
 import 'http_tracker_base.dart';
 import 'tracker.dart';
 import '../utils.dart' as utils;
@@ -17,18 +16,10 @@ import '../utils.dart' as utils;
 class HttpTracker extends Tracker with HttpTrackerBase {
   String _trackerId;
   String _currentEvent;
-  HttpTracker(Uri _uri, String peerId, String hashInfo, int port,
-      {int downloaded,
-      int left,
-      int uploaded,
-      int compact = 1,
-      int numwant = 50})
-      : super('${_uri.origin}${_uri.path}', _uri, peerId, hashInfo, port,
-            downloaded: downloaded,
-            left: left,
-            uploaded: uploaded,
-            compact: compact,
-            numwant: numwant);
+  HttpTracker(Uri _uri, Uint8List infoHashBuffer,
+      {AnnounceOptionsProvider provider})
+      : super('${_uri.origin}${_uri.path}', _uri, infoHashBuffer,
+            provider: provider);
 
   String get currentTrackerId {
     return _trackerId;
@@ -39,21 +30,23 @@ class HttpTracker extends Tracker with HttpTrackerBase {
   }
 
   @override
-  Future stop() {
+  Future stop([bool force = false]) {
+    var f = super.stop(force);
     clean();
-    return super.stop();
+    return f;
   }
 
   @override
   Future complete() {
+    var f = super.complete();
     clean();
-    return super.complete();
+    return f;
   }
 
   @override
-  Future announce(String event) {
+  Future<PeerEvent> announce(String event, Map<String, dynamic> options) {
     _currentEvent = event; // 修改当前event，stop和complete也会调用该方法，所以要在这里进行记录当前event类型
-    return httpGet();
+    return httpGet<PeerEvent>(options);
   }
 
   ///
@@ -77,16 +70,20 @@ class HttpTracker extends Tracker with HttpTrackerBase {
   /// - no_peer_id : 如果compact指定，则该字段会被忽略。我在这里的compact一直都是1，所以就没有设该值
   ///
   @override
-  Map<String, String> generateQueryParameters() {
+  Map<String, String> generateQueryParameters(Map<String, dynamic> options) {
     var params = <String, String>{};
-    params['compact'] = compact.toString();
-    params['downloaded'] = downloaded.toString();
-    params['uploaded'] = uploaded.toString();
-    params['left'] = left.toString();
-    params['numwant'] = (numwant != null) ? numwant.toString() : '-1';
-    params['info_hash'] = Uri.encodeQueryComponent(hashInfo, encoding: latin1);
-    params['port'] = port.toString();
-    params['peer_id'] = peerId;
+    params['compact'] = options['compact'].toString();
+    params['downloaded'] = options['downloaded'].toString();
+    params['uploaded'] = options['uploaded'].toString();
+    params['left'] = options['left'].toString();
+    params['numwant'] = options['numwant'].toString();
+    // infohash value usually can not be decode by utf8, because some special character,
+    // so I transform them with String.fromCharCodes , when transform them to the query component, use latin1 encoding
+    params['info_hash'] = Uri.encodeQueryComponent(
+        String.fromCharCodes(infoHashBuffer),
+        encoding: latin1);
+    params['port'] = options['port'].toString();
+    params['peer_id'] = options['peerId'];
     var event = currentEvent;
     if (event != null) {
       params['event'] = event;
@@ -95,8 +92,8 @@ class HttpTracker extends Tracker with HttpTrackerBase {
     }
     if (currentTrackerId != null) params['trackerid'] = currentTrackerId;
     // params['no_peer_id']
-    // params['ip'] = peerId; 可选
-    // params['key'] = peerId; 可选
+    // params['ip'] ; 可选
+    // params['key'] ; 可选
     return params;
   }
 
@@ -110,46 +107,65 @@ class HttpTracker extends Tracker with HttpTrackerBase {
   /// ip address.
   /// - Sometimes , the remote will return 'failer reason', then need to throw a exception
   @override
-  dynamic processResponseData(Uint8List data) {
+  PeerEvent processResponseData(Uint8List data) {
     var result = decode(data) as Map;
-
-    if (result['min interval'] != null) {
-      if (result['interval'] != null) {
-        // 取最小的值作为时间间隔
-        result['interval'] =
-            math.min<int>(result['min interval'], result['interval']);
-      } else {
-        result['interval'] = result['min interval'];
-      }
-    }
+    // You cuo wu , jiu tao chu qu
     if (result['failure reason'] != null) {
-      var errorMsg = utf8.decode(result['failure reason']);
-      log('得到对方返回的错误信息',
-          name: runtimeType.toString(), time: DateTime.now(), error: errorMsg);
-      throw Exception(errorMsg);
+      var errorMsg = String.fromCharCodes(result['failure reason']);
+      throw errorMsg;
     }
-    if (result['warning message'] != null) {
-      result['warning message'] = utf8.decode(result['warning message']);
-    }
+    // If 'tracker id' is existed, record it
     if (result['tracker id'] != null) {
       _trackerId = result['tracker id'];
     }
-    if (result['peers'] != null) {
-      if (result['peers'] is Uint8List) {
-        result['peers'] = utils.getPeerIPv4List(result['peers']);
-      }
-    }
-    if (result['peers6'] != null) {
-      //   TODO 实现IPv6
-    }
 
-    // 剔除一些没必要返回的信息
-    result.removeWhere((key, value) {
-      return (key == 'min interval' || key == 'tracker id');
+    var event = PeerEvent(infoHash, url);
+    result.forEach((key, value) {
+      if (key == 'min interval') {
+        event.minInterval = value;
+        return;
+      }
+      if (key == 'interval') {
+        event.interval = value;
+        return;
+      }
+      if (key == 'warning message' && value != null) {
+        event.warning = String.fromCharCodes(value);
+        return;
+      }
+      if (key == 'complete') {
+        event.complete = value;
+        return;
+      }
+      if (key == 'incomplete') {
+        event.incomplete = value;
+        return;
+      }
+      if (key == 'downloaded') {
+        event.downloaded = value;
+        return;
+      }
+      if (key == 'peers' && value != null) {
+        if (value is Uint8List) {
+          var peers = utils.getPeerIPv4List(value);
+          peers.forEach((peer) => event.addPeer(peer));
+        } else {
+          if (value is List) {
+            value.forEach((peer) {
+              event.addPeer(Uri(host: peer.ip, port: peer.port));
+            });
+          }
+        }
+        return;
+      }
+
+      if (key == 'peers6' && value != null) {
+        // TODO process IPv6
+      }
+      // record the values don't process
+      event.setInfo(key, value);
     });
-    log('成功从 $announceUrl 获取数据 : $result',
-        name: runtimeType.toString(), time: DateTime.now());
-    return result;
+    return event;
   }
 
   @override
