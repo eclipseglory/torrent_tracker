@@ -46,7 +46,7 @@ abstract class Scrape {
   @override
   bool operator ==(b) {
     if (b is Scrape) return b.id == id;
-    return this == b;
+    return false;
   }
 
   @override

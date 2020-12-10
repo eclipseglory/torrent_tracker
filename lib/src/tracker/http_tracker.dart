@@ -44,6 +44,12 @@ class HttpTracker extends Tracker with HttpTrackerBase {
   }
 
   @override
+  Future dispose() async {
+    clean();
+    return super.dispose();
+  }
+
+  @override
   Future<PeerEvent> announce(String event, Map<String, dynamic> options) {
     _currentEvent = event; // 修改当前event，stop和complete也会调用该方法，所以要在这里进行记录当前event类型
     return httpGet<PeerEvent>(options);

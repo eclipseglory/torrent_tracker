@@ -4,7 +4,6 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'peer_event.dart';
-import 'tracker_exception.dart';
 
 const EVENT_STARTED = 'started';
 const EVENT_UPDATE = 'update';
@@ -35,7 +34,11 @@ abstract class Tracker {
   /// 循环scrape数据的间隔时间，单位秒，默认1分钟
   int announceScrape = 1 * 60;
 
-  StreamController _announceSC;
+  final Set<void Function(PeerEvent)> _peerEventHandlers = {};
+
+  final Set<void Function(dynamic error)> _announceErrorHandlers = {};
+
+  final Set<void Function(int intervalTime)> _announceOverHandlers = {};
 
   Timer _announceTimer;
 
@@ -61,17 +64,40 @@ abstract class Tracker {
   ///
   /// 开始循环发起announce访问。
   ///
-  /// 返回一个Stream，调用者可以利用listen方法监听返回结果以及发生的错误,
-  /// 如果该Tracker已经处于开始状态，返回false
-  ///
-  Stream start() {
-    if (!_stopped) return Stream.value(false);
+  Future<void> start() async {
+    if (!_stopped) return; // Stream.value(false);
     _stopped = false;
-    _announceSC?.close();
-    _announceSC = StreamController();
-    _announceTimer?.cancel();
-    _intervalAnnounce(null, EVENT_STARTED, _announceSC);
-    return _announceSC.stream;
+    return _intervalAnnounce(null, EVENT_STARTED);
+  }
+
+  void onAnnounceError(void Function(dynamic error) handler) {
+    _announceErrorHandlers.add(handler);
+  }
+
+  void onPeerEvent(void Function(PeerEvent) handler) {
+    _peerEventHandlers.add(handler);
+  }
+
+  void onAnnounceOver(void Function(int intervalTime) handler) {
+    _announceOverHandlers.add(handler);
+  }
+
+  void _firePeerEvent(PeerEvent event) {
+    _peerEventHandlers.forEach((handler) {
+      Timer.run(() => handler(event));
+    });
+  }
+
+  void _fireAnnounceError(dynamic error) {
+    _announceErrorHandlers.forEach((handler) {
+      Timer.run(() => handler(error));
+    });
+  }
+
+  void _fireAnnounceOver(int intervalTime) {
+    _announceOverHandlers.forEach((handler) {
+      Timer.run(() => handler(intervalTime));
+    });
   }
 
   ///
@@ -79,51 +105,58 @@ abstract class Tracker {
   /// 每次循环访问的间隔时间是announceInterval，子类在实现announce方法的时候返回值需要加入interval值，
   /// 这里会比较返回值和现有值，如果不同会停止当前的Timer并重新生成一个新的循环间隔Timer
   ///
-  /// 如果announce抛出异常，该循环不会停止
-  void _intervalAnnounce(Timer timer, String event, StreamController sc) async {
+  /// 如果announce抛出异常，该循环不会停止,除非[errorOrCancel]设置位 `true`
+  void _intervalAnnounce(Timer timer, String event,
+      [bool errorOrCancel = false]) async {
+    if (isStopped) {
+      timer?.cancel();
+      return;
+    }
+    PeerEvent result;
     try {
-      if (isStopped) {
+      result = await announce(event, await _announceOptions);
+      result.eventType = event;
+      _firePeerEvent(result);
+    } catch (e) {
+      _fireAnnounceError(e);
+      if (errorOrCancel) {
         timer?.cancel();
+        timer = null;
         return;
       }
-      var result;
-      try {
-        result = await announce(event, await _announceOptions);
-        sc.add(result);
-      } catch (e) {
-        sc.addError(TrackerException(infoHash, e));
-      }
-      var interval;
-      if (result != null && result is PeerEvent) {
-        var inter = result.interval;
-        var minInter = result.minInterval;
-        if (inter == null) {
-          interval = minInter;
+    }
+    var interval;
+    if (result != null && result is PeerEvent) {
+      var inter = result.interval;
+      var minInter = result.minInterval;
+      if (inter == null) {
+        interval = minInter;
+      } else {
+        if (minInter != null) {
+          interval = min(inter, minInter);
         } else {
-          if (minInter != null) {
-            interval = min(inter, minInter);
-          } else {
-            interval = inter;
-          }
+          interval = inter;
         }
       }
-      // debug:
-      // if(announceUrl.host == 'tracker.gbitt.info'){
-      //   print('here');
-      // }
-      interval ??= _announceInterval;
-      if (timer == null || interval != _announceInterval) {
-        timer?.cancel();
-        _announceInterval = interval;
-        // _announceInterval = 10; //test
-        _announceTimer = Timer.periodic(Duration(seconds: _announceInterval),
-            (timer) => _intervalAnnounce(timer, event, sc));
-        return;
-      }
-    } catch (e) {
-      sc.addError(TrackerException(infoHash, e));
     }
+    // debug:
+    // if(announceUrl.host == 'tracker.gbitt.info'){
+    //   print('here');
+    // }
+    interval ??= _announceInterval;
+    if (timer == null || interval != _announceInterval) {
+      timer?.cancel();
+      _announceInterval = interval;
+      // _announceInterval = 10; //test
+      _announceTimer = Timer.periodic(Duration(seconds: _announceInterval),
+          (timer) => _intervalAnnounce(timer, event));
+    }
+    _fireAnnounceOver(_announceInterval);
     return;
+  }
+
+  Future dispose() async {
+    _clean();
   }
 
   Future<Map<String, dynamic>> get _announceOptions async {
@@ -142,7 +175,6 @@ abstract class Tracker {
   }
 
   void _clean() {
-    _announceSC?.close();
     _announceTimer?.cancel();
     _announceTimer = null;
   }
@@ -161,7 +193,9 @@ abstract class Tracker {
     if (force) {
       return Future.value(true);
     }
-    return announce(EVENT_STOPPED, await _announceOptions);
+    var re = await announce(EVENT_STOPPED, await _announceOptions);
+    re.eventType = EVENT_STOPPED;
+    return _firePeerEvent(re);
   }
 
   ///
@@ -172,7 +206,9 @@ abstract class Tracker {
     if (_stopped) return Future.value(false);
     _clean();
     _stopped = true;
-    return announce(EVENT_COMPLETED, await _announceOptions);
+    var re = await announce(EVENT_COMPLETED, await _announceOptions);
+    re.eventType = EVENT_COMPLETED;
+    return _firePeerEvent(re);
   }
 
   ///

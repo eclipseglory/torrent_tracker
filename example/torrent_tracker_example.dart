@@ -18,8 +18,19 @@ void main() async {
   try {
     var torrentTracker = TorrentAnnounceTracker(
         torrent.announces.toList(), torrent.infoHashBuffer, provider);
+    torrentTracker.onAnnounceError((source, error) {
+      // print('${source.announceUrl} : $error');
+    });
+    torrentTracker.onPeerEvent((source, event) {
+      // print('${source.announceUrl} : $event');
+    });
 
-    // var stream = torrentTracker.start();
+    torrentTracker.onAnnounceOver((source, time) {
+      print('${source.announceUrl} : $time');
+    });
+
+    torrentTracker.start();
+
     // stream.listen((event) {
     //   if (event['event'] is PeerEvent) {
     //     log(event['event'].toString());
@@ -37,13 +48,13 @@ void main() async {
     //   log('发生错误,close it,get response: $r', error: e['error']);
     // }, onDone: () => print('Torrent Tracker Closed'));
 
-    var scrapeTracker = TorrentScrapeTracker();
-    scrapeTracker.createScrapeFromAnnounces(
-        torrent.announces.toList(), torrent.infoHashBuffer);
-    // print(scrapeTracker);
-    scrapeTracker.scrape().listen((event) {
-      print(event);
-    }, onError: (e) => log('error:', error: e));
+    // var scrapeTracker = TorrentScrapeTracker();
+    // scrapeTracker.createScrapeFromAnnounces(
+    //     torrent.announces.toList(), torrent.infoHashBuffer);
+    // // print(scrapeTracker);
+    // scrapeTracker.scrape().listen((event) {
+    //   print(event);
+    // }, onError: (e) => log('error:', error: e));
   } catch (e) {
     print(e);
   }

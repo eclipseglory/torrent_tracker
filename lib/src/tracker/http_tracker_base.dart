@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'dart:typed_data';
 
-
 ///
 /// Because access announce or scrape url , the access workflow is the same , but different url
 /// with diffrent query string. So this class implement the http access announce main processes,

@@ -14,8 +14,8 @@ abstract class TrackerGenerator {
 
 class BaseTrackerGenerator implements TrackerGenerator {
   @override
-  Tracker createTracker(
-      Uri announce, Uint8List infoHashBuffer, AnnounceOptionsProvider provider) {
+  Tracker createTracker(Uri announce, Uint8List infoHashBuffer,
+      AnnounceOptionsProvider provider) {
     if (announce.isScheme('http') || announce.isScheme('https')) {
       return HttpTracker(announce, infoHashBuffer, provider: provider);
     }

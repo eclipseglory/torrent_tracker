@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -70,7 +69,7 @@ dynamic getPeerIPv4(ByteData byteView, [int offset = 0]) {
   var b = byteView.getUint8(offset + 1);
   var c = byteView.getUint8(offset + 2);
   var d = byteView.getUint8(offset + 3);
-  var port = byteView.getUint16(offset + 4);
+  var port = byteView.getUint16(offset + 4, Endian.big);
   return Uri(host: '$a.$b.$c.$d', port: port);
   // return {'ip': '$a.$b.$c.$d', 'port': port};
   // switch (bytes.length) {

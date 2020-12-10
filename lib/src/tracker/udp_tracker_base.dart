@@ -1,9 +1,8 @@
 import 'dart:async';
+import 'dart:developer';
 import 'dart:io';
 
 import 'dart:typed_data';
-
-import 'tracker_exception.dart';
 
 import '../utils.dart';
 
@@ -55,10 +54,6 @@ mixin UDPTrackerBase {
   /// 生成一个随机4字节的bytebuffer
   Uint8List _generateTranscationId() {
     return randomBytes(4);
-  }
-
-  String get _rawUrl {
-    return 'udp://${uri.host}:${uri.port}';
   }
 
   /// 与Remote通讯的第一次连接
@@ -202,10 +197,14 @@ mixin UDPTrackerBase {
 
   /// 发送数据包到指定的ip地址
   Future _sendMessage(Uint8List message, String host, int port) async {
-    var ips = await InternetAddress.lookup(host);
-    ips.forEach((ip) {
-      // print('send $message to $ip : ${_uri.port}');
-      _socket?.send(message, ip, port);
-    });
+    try {
+      var ips = await InternetAddress.lookup(host);
+      ips.forEach((ip) async {
+        // print('send $message to $ip : ${_uri.port}');
+        await _socket?.send(message, ip, port);
+      });
+    } catch (e) {
+      log('Send Message Error', error: e, name: runtimeType.toString());
+    }
   }
 }

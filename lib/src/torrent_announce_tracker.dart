@@ -1,13 +1,24 @@
 import 'dart:async';
+import 'dart:developer';
 import 'dart:typed_data';
+
+import 'package:torrent_tracker/src/tracker/peer_event.dart';
 
 import 'tracker/tracker.dart';
 import 'tracker_generator.dart';
+
+typedef AnnounceErrorHandler = void Function(Tracker t, dynamic error);
+
+typedef AnnounceOverHandler = void Function(Tracker t, int time);
+
+typedef PeerEventHandler = void Function(Tracker t, PeerEvent event);
 
 /// Torrent announce tracker.
 ///
 /// Create announce trackers from torrent model. This class can start/stop
 /// trackers , and send track response event or track exception to client.
+///
+///
 class TorrentAnnounceTracker {
   /// Torrent file info hash bytebuffer
   Uint8List infoHashBuffer;
@@ -20,7 +31,13 @@ class TorrentAnnounceTracker {
 
   AnnounceOptionsProvider provider;
 
-  StreamController _streamController;
+  final Set<AnnounceErrorHandler> _announceErrorHandlers = {};
+
+  final Set<AnnounceOverHandler> _announceOverHandlers = {};
+
+  final Set<PeerEventHandler> _peerEventHandlers = {};
+
+  final Set<String> _announceOverTrackers = {};
 
   /// [infoHashBuffer] is torrent info hash bytebuffer.
   ///
@@ -86,22 +103,17 @@ class TorrentAnnounceTracker {
 
   /// Start all trackers;
   /// If trackers dont be created , just generate all trackers;
-  Stream start() {
-    _streamController ??= StreamController();
+  void start([bool errorOrRemove]) async {
     trackers = createTrackers(announces);
-    trackers.forEach((id, tracker) {
-      tracker.start().listen((event) {
-        _streamController.add({'event': event, 'id': id});
-      }, onError: (e) {
-        _streamController.addError({'error': e, 'id': id});
-      }, onDone: () {
-        _streamController.add({'event': 'done', 'id': id});
-        if (_checkTrackersStatus()) {
-          _cleanup();
-        }
-      });
+    trackers.forEach((id, tracker) async {
+      try {
+        await tracker.start();
+      } catch (e) {
+        trackers.remove(tracker.id);
+        log('Tracker 连接出错 ： ${tracker.id}',
+            error: e, name: runtimeType.toString());
+      }
     });
-    return _streamController.stream;
   }
 
   /// Check if all trackers has been stopped
@@ -135,10 +147,9 @@ class TorrentAnnounceTracker {
     return Stream.fromFutures(list);
   }
 
-  Stream startTracker(String id) {
+  Future<void> startTracker(String id) async {
     var tracker = trackers[id];
     if (tracker != null) return tracker.start();
-    return Stream.empty();
   }
 
   Future stopTracker(String id, [bool force = false]) {
@@ -155,9 +166,11 @@ class TorrentAnnounceTracker {
 
   /// Close stream controller
   Future _cleanup() {
-    var f = _streamController?.close();
-    _streamController = null;
-    return f;
+    trackers.clear();
+    _announceOverTrackers.clear();
+    _peerEventHandlers.clear();
+    _announceOverHandlers.clear();
+    _announceErrorHandlers.clear();
   }
 
   Map<String, Tracker> createTrackers(List<Uri> announces) {
@@ -166,8 +179,58 @@ class TorrentAnnounceTracker {
     announces.forEach((announce) {
       var tracker =
           trackerGenerator.createTracker(announce, infoHashBuffer, provider);
-      if (tracker != null) trackers[tracker.id] = tracker;
+      if (tracker != null && trackers[tracker.id] == null) {
+        trackers[tracker.id] = tracker;
+        _hookTrakcer(tracker);
+      }
     });
     return trackers;
+  }
+
+  void onAnnounceError(void Function(Tracker source, dynamic error) f) {
+    _announceErrorHandlers.add(f);
+  }
+
+  void onAnnounceOver(void Function(Tracker source, int time) f) {
+    _announceOverHandlers.add(f);
+  }
+
+  void onPeerEvent(void Function(Tracker source, PeerEvent event) f) {
+    _peerEventHandlers.add(f);
+  }
+
+  void _fireAnnounceError(Tracker trakcer, dynamic error) {
+    _announceErrorHandlers.forEach((f) {
+      Timer.run(() => f(trakcer, error));
+    });
+  }
+
+  void _fireAnnounceOver(Tracker trakcer, int time) {
+    _announceOverHandlers.forEach((f) {
+      Timer.run(() => f(trakcer, time));
+    });
+
+    _announceOverTrackers.add(trakcer.id);
+
+    for (var i = 0; i < trackers.keys.length; i++) {
+      var id = trackers.keys.elementAt(i);
+      if (!_announceOverTrackers.contains(id)) {
+        return;
+      }
+    }
+    _announceOverTrackers.clear();
+    log('全部都announce一遍');
+  }
+
+  void _firePeerEvent(Tracker trakcer, PeerEvent event) {
+    _peerEventHandlers.forEach((f) {
+      Timer.run(() => f(trakcer, event));
+    });
+  }
+
+  void _hookTrakcer(Tracker tracker) {
+    tracker.onAnnounceError((error) => _fireAnnounceError(tracker, error));
+    tracker.onAnnounceOver((time) => _fireAnnounceOver(tracker, time));
+    tracker.onPeerEvent((event) => _firePeerEvent(tracker, event));
   }
 }

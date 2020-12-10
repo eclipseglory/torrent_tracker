@@ -1,6 +1,14 @@
 import 'tracker_event_base.dart';
 
+///
+/// This class recorded the response from remote when tracker access announce successfully
 class PeerEvent extends TrackerEventBase {
+  /// Event type :
+  /// - [START]
+  /// - [COMPLETE]
+  /// - [STOPPED]
+  String eventType;
+
   /// Server host url
   final Uri serverHost;
 
@@ -26,7 +34,7 @@ class PeerEvent extends TrackerEventBase {
   String warning;
 
   /// peer uri set
-  Set peers = <Uri>{};
+  Set<Uri> peers = <Uri>{};
 
   PeerEvent(this.infoHash, this.serverHost,
       {this.complete,
