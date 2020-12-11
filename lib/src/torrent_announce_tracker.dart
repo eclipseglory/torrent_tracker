@@ -107,13 +107,9 @@ class TorrentAnnounceTracker {
   /// If trackers dont be created , just generate all trackers;
   void start([bool errorOrRemove = false]) async {
     trackers = createTrackers(announces);
-    trackers.forEach((id, tracker) async {
-      try {
-        await tracker.start(errorOrRemove);
-      } catch (e) {
-        log('Tracker 出错 ： ${tracker.id}',
-            error: e, name: runtimeType.toString());
-      }
+    log('开始运行announce....');
+    trackers.forEach((id, tracker) {
+      tracker.start(errorOrRemove);
     });
   }
 
@@ -183,6 +179,7 @@ class TorrentAnnounceTracker {
     trackers ??= {};
     trackers.clear();
     announces.forEach((announce) {
+      if (announce.port > 65535) return;
       var tracker =
           trackerGenerator.createTracker(announce, infoHashBuffer, provider);
       if (tracker != null && trackers[tracker.id] == null) {

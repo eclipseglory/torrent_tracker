@@ -69,9 +69,11 @@ mixin UDPTrackerBase {
     list.addAll(ACTION_CONNECT);
     list.addAll(transcationId);
     var messageBytes = Uint8List.fromList(list);
-    await _sendMessage(messageBytes, uri.host, uri.port).catchError((e) {
+    try {
+      await _sendMessage(messageBytes, uri.host, uri.port);
+    } catch (e) {
       _returnError(completer, e);
-    });
+    }
   }
 
   ///
@@ -107,6 +109,9 @@ mixin UDPTrackerBase {
     }, onError: (e) {
       _clean();
       completer.completeError(e);
+    }, onDone: () {
+      _clean();
+      completer.completeError('Remote closed');
     });
 
     // 第一步，连接对方
@@ -199,10 +204,10 @@ mixin UDPTrackerBase {
   Future _sendMessage(Uint8List message, String host, int port) async {
     try {
       var ips = await InternetAddress.lookup(host);
-      ips.forEach((ip) async {
-        // print('send $message to $ip : ${_uri.port}');
+      for (var i = 0; i < ips.length; i++) {
+        var ip = ips[i];
         await _socket?.send(message, ip, port);
-      });
+      }
     } catch (e) {
       log('Send Message Error', error: e, name: runtimeType.toString());
     }
