@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer';
 import 'dart:typed_data';
 import 'package:bencode_dart/bencode_dart.dart' as bencode;
 import 'scrape_event.dart';
@@ -89,7 +90,7 @@ class HttpScrape extends Scrape with HttpTrackerBase {
       var re = await httpGet(options);
       return re;
     } catch (e) {
-      rethrow;
+      log('Scrape Error : $url', error: e, name: runtimeType.toString());
     } finally {
       clean();
     }

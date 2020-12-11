@@ -33,6 +33,8 @@ class TorrentAnnounceTracker {
 
   final Set<AnnounceErrorHandler> _announceErrorHandlers = {};
 
+  final Set<void Function(int total)> _announceAllOverOneTurnHandlers = {};
+
   final Set<AnnounceOverHandler> _announceOverHandlers = {};
 
   final Set<PeerEventHandler> _peerEventHandlers = {};
@@ -103,14 +105,13 @@ class TorrentAnnounceTracker {
 
   /// Start all trackers;
   /// If trackers dont be created , just generate all trackers;
-  void start([bool errorOrRemove]) async {
+  void start([bool errorOrRemove = false]) async {
     trackers = createTrackers(announces);
     trackers.forEach((id, tracker) async {
       try {
-        await tracker.start();
+        await tracker.start(errorOrRemove);
       } catch (e) {
-        trackers.remove(tracker.id);
-        log('Tracker 连接出错 ： ${tracker.id}',
+        log('Tracker 出错 ： ${tracker.id}',
             error: e, name: runtimeType.toString());
       }
     });
@@ -164,6 +165,11 @@ class TorrentAnnounceTracker {
     return Future.value(false);
   }
 
+  Tracker removeTracker(String id) {
+    _announceOverTrackers.remove(id);
+    return trackers.remove(id);
+  }
+
   /// Close stream controller
   Future _cleanup() {
     trackers.clear();
@@ -199,6 +205,10 @@ class TorrentAnnounceTracker {
     _peerEventHandlers.add(f);
   }
 
+  void onAllAnnounceOver(void Function(int totalTrackers) h) {
+    _announceAllOverOneTurnHandlers.add(h);
+  }
+
   void _fireAnnounceError(Tracker trakcer, dynamic error) {
     _announceErrorHandlers.forEach((f) {
       Timer.run(() => f(trakcer, error));
@@ -219,7 +229,10 @@ class TorrentAnnounceTracker {
       }
     }
     _announceOverTrackers.clear();
-    log('全部都announce一遍');
+    _announceAllOverOneTurnHandlers.forEach((h) {
+      Timer.run(() => h(trackers.length));
+    });
+    // Timer.run(() => )
   }
 
   void _firePeerEvent(Tracker trakcer, PeerEvent event) {
@@ -232,5 +245,12 @@ class TorrentAnnounceTracker {
     tracker.onAnnounceError((error) => _fireAnnounceError(tracker, error));
     tracker.onAnnounceOver((time) => _fireAnnounceOver(tracker, time));
     tracker.onPeerEvent((event) => _firePeerEvent(tracker, event));
+  }
+
+  Future dispose() async {
+    trackers.values.forEach((element) {
+      element.dispose();
+    });
+    return _cleanup();
   }
 }

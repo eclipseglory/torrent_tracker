@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer';
 import 'dart:typed_data';
 
 import 'peer_event.dart';
@@ -65,6 +66,7 @@ class UDPTracker extends Tracker with UDPTrackerBase {
       getPeerIPv4List(data.sublist(20)).forEach((url) => event.addPeer(url));
     } catch (e) {
       // 容错
+      log('解析peer ip 出错', name: runtimeType.toString(), error: e);
     }
     return event;
   }

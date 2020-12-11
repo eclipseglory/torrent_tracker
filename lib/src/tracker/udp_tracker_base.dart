@@ -61,7 +61,7 @@ mixin UDPTrackerBase {
   /// Announce 和 Scrape通讯的时候，都必须要走这第一步，是固定的。
   ///
   /// 参数completer是一个`Completer`实例。用于截获发生的异常，并通过completeError截获
-  void _connect(Completer completer, Map options) {
+  void _connect(Completer completer, Map options) async {
     var uri = this.uri;
     if (uri == null) _returnError(completer, '目标地址Uri不能为空');
     var list = <int>[];
@@ -69,7 +69,7 @@ mixin UDPTrackerBase {
     list.addAll(ACTION_CONNECT);
     list.addAll(transcationId);
     var messageBytes = Uint8List.fromList(list);
-    _sendMessage(messageBytes, uri.host, uri.port).catchError((e) {
+    await _sendMessage(messageBytes, uri.host, uri.port).catchError((e) {
       _returnError(completer, e);
     });
   }
@@ -111,7 +111,7 @@ mixin UDPTrackerBase {
 
     // 第一步，连接对方
     try {
-      _connect(completer, options);
+      await _connect(completer, options);
     } catch (e) {
       _clean();
       if (!completer.isCompleted) completer.completeError(e);

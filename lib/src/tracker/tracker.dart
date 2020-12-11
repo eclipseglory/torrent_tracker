@@ -42,6 +42,8 @@ abstract class Tracker {
 
   Timer _announceTimer;
 
+  bool _disposed = false;
+
   AnnounceOptionsProvider provider;
 
   Tracker(this.id, this.announceUrl, this.infoHashBuffer, {this.provider}) {
@@ -64,10 +66,11 @@ abstract class Tracker {
   ///
   /// 开始循环发起announce访问。
   ///
-  Future<void> start() async {
-    if (!_stopped) return; // Stream.value(false);
+  Future<bool> start([bool errorOrCancel = false]) async {
+    if (isDisposed) throw Exception('This tracker was disposed');
+    if (!_stopped) return false; // Stream.value(false);
     _stopped = false;
-    return _intervalAnnounce(null, EVENT_STARTED);
+    return _intervalAnnounce(null, EVENT_STARTED, errorOrCancel);
   }
 
   void onAnnounceError(void Function(dynamic error) handler) {
@@ -106,11 +109,11 @@ abstract class Tracker {
   /// 这里会比较返回值和现有值，如果不同会停止当前的Timer并重新生成一个新的循环间隔Timer
   ///
   /// 如果announce抛出异常，该循环不会停止,除非[errorOrCancel]设置位 `true`
-  void _intervalAnnounce(Timer timer, String event,
+  Future<bool> _intervalAnnounce(Timer timer, String event,
       [bool errorOrCancel = false]) async {
     if (isStopped) {
       timer?.cancel();
-      return;
+      return false;
     }
     PeerEvent result;
     try {
@@ -122,7 +125,8 @@ abstract class Tracker {
       if (errorOrCancel) {
         timer?.cancel();
         timer = null;
-        return;
+        _fireAnnounceOver(_announceInterval);
+        return false;
       }
     }
     var interval;
@@ -152,10 +156,13 @@ abstract class Tracker {
           (timer) => _intervalAnnounce(timer, event));
     }
     _fireAnnounceOver(_announceInterval);
-    return;
+    return true;
   }
 
+  bool get isDisposed => _disposed;
+
   Future dispose() async {
+    _disposed = true;
     _clean();
   }
 
@@ -175,6 +182,9 @@ abstract class Tracker {
   }
 
   void _clean() {
+    _peerEventHandlers.clear();
+    _announceErrorHandlers.clear();
+    _announceOverHandlers.clear();
     _announceTimer?.cancel();
     _announceTimer = null;
   }
@@ -187,6 +197,7 @@ abstract class Tracker {
   /// [force] 是强制关闭标识，默认值为`false`。 如果为`true`，刚方法不会去调用`announce`方法
   /// 发送`stopped`请求，而是直接返回一个`true`
   Future stop([bool force = false]) async {
+    if (isDisposed) throw Exception('This tracker was disposed');
     if (_stopped) return Future.value(false);
     _clean();
     _stopped = true;
@@ -203,6 +214,7 @@ abstract class Tracker {
   ///
   /// 该方法会调用一次announce，参数位completed。该方法和stop是独立两个方法，如果需要释放资源等善后工作，子类必须复写该方法
   Future complete() async {
+    if (isDisposed) throw Exception('This tracker was disposed');
     if (_stopped) return Future.value(false);
     _clean();
     _stopped = true;
