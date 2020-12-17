@@ -111,7 +111,7 @@ mixin UDPTrackerBase {
       completer.completeError(e);
     }, onDone: () {
       _clean();
-      completer.completeError('Remote closed');
+      if (!completer.isCompleted) completer.completeError('Remote closed');
     });
 
     // 第一步，连接对方
@@ -161,7 +161,6 @@ mixin UDPTrackerBase {
       var action = view.getUint32(0);
       // 表明连接成功，可以进行announce
       if (action == 0) {
-        // print('$announceUrl connect success , ready to announce');
         try {
           _connectionId = data.sublist(8, 16); // 返回信息的第8-16位是下次连接的connection id
           _announce(completer, _connectionId, options); // 继续，不要停
@@ -180,8 +179,6 @@ mixin UDPTrackerBase {
       }
       // announce获得返回结果
       _clean(); // Announce获得结果后就关闭socket不再监听。
-      // print('$announceUrl announce success , ready to read data');
-      // print(data);
       var result;
       try {
         result = processResponseData(data, action);

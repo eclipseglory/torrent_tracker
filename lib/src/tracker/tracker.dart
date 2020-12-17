@@ -195,32 +195,32 @@ abstract class Tracker {
   /// 该方法会调用一次`announce`，参数位`stopped`。
   ///
   /// [force] 是强制关闭标识，默认值为`false`。 如果为`true`，刚方法不会去调用`announce`方法
-  /// 发送`stopped`请求，而是直接返回一个`true`
-  Future stop([bool force = false]) async {
+  /// 发送`stopped`请求，而是直接返回一个`null`
+  Future<PeerEvent> stop([bool force = false]) async {
     if (isDisposed) throw Exception('This tracker was disposed');
-    if (_stopped) return Future.value(false);
+    if (_stopped) return null;
     _clean();
     _stopped = true;
     if (force) {
-      return Future.value(true);
+      return null;
     }
     var re = await announce(EVENT_STOPPED, await _announceOptions);
     re.eventType = EVENT_STOPPED;
-    return _firePeerEvent(re);
+    _firePeerEvent(re);
+    return re;
   }
 
   ///
   /// 当完成下载后需要调用该方法去通知announce。
   ///
-  /// 该方法会调用一次announce，参数位completed。该方法和stop是独立两个方法，如果需要释放资源等善后工作，子类必须复写该方法
-  Future complete() async {
+  /// 该方法会调用一次announce，参数位completed。
+  Future<PeerEvent> complete() async {
     if (isDisposed) throw Exception('This tracker was disposed');
-    if (_stopped) return Future.value(false);
-    _clean();
-    _stopped = true;
+    if (_stopped) return null;
     var re = await announce(EVENT_COMPLETED, await _announceOptions);
     re.eventType = EVENT_COMPLETED;
-    return _firePeerEvent(re);
+    _firePeerEvent(re);
+    return re;
   }
 
   ///

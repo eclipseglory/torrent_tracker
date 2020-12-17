@@ -125,26 +125,26 @@ class TorrentAnnounceTracker {
   }
 
   /// Stop all trackers;
-  Stream stop() {
-    var list = <Future>[];
-    list.add(_cleanup());
+  Future<List<PeerEvent>> stop([bool force = false]) {
+    var list = <Future<PeerEvent>>[];
+    _cleanup();
     trackers.forEach((id, tracker) {
-      list.add(tracker.stop());
+      list.add(tracker.stop(force));
     });
-    return Stream.fromFutures(list);
+    return Stream.fromFutures(list).toList();
   }
 
   /// Ask all trackers to complete;
-  Stream complete() {
-    var list = <Future>[];
-    list.add(_cleanup());
+  Future<List<PeerEvent>> complete() {
+    var list = <Future<PeerEvent>>[];
+    _cleanup();
     trackers.forEach((id, tracker) {
       list.add(tracker.complete());
     });
-    return Stream.fromFutures(list);
+    return Stream.fromFutures(list).toList();
   }
 
-  Future<void> startTracker(String id) async {
+  Future startTracker(String id) async {
     var tracker = trackers[id];
     if (tracker != null) return tracker.start();
   }
@@ -152,13 +152,13 @@ class TorrentAnnounceTracker {
   Future stopTracker(String id, [bool force = false]) {
     var tracker = trackers[id];
     if (tracker != null) return tracker.stop(force);
-    return Future.value(false);
+    return null;
   }
 
   Future completeTracker(String id) {
     var tracker = trackers[id];
     if (tracker != null) return tracker.complete();
-    return Future.value(false);
+    return null;
   }
 
   Tracker removeTracker(String id) {
@@ -167,7 +167,7 @@ class TorrentAnnounceTracker {
   }
 
   /// Close stream controller
-  Future _cleanup() {
+  void _cleanup() {
     trackers.clear();
     _announceOverTrackers.clear();
     _peerEventHandlers.clear();
@@ -236,6 +236,12 @@ class TorrentAnnounceTracker {
     _peerEventHandlers.forEach((f) {
       Timer.run(() => f(trakcer, event));
     });
+  }
+
+  void addPeer(Uri host, Uri peer, String infoHash) {
+    var event = PeerEvent(infoHash, peer);
+    event.addPeer(peer);
+    _firePeerEvent(null, event);
   }
 
   void _hookTrakcer(Tracker tracker) {

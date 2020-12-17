@@ -30,14 +30,14 @@ class HttpTracker extends Tracker with HttpTrackerBase {
   }
 
   @override
-  Future stop([bool force = false]) {
+  Future<PeerEvent> stop([bool force = false]) {
     var f = super.stop(force);
     clean();
     return f;
   }
 
   @override
-  Future complete() {
+  Future<PeerEvent> complete() {
     var f = super.complete();
     clean();
     return f;
