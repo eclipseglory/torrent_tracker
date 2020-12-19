@@ -1,5 +1,6 @@
 import 'dart:async';
-import 'dart:math';
+import 'dart:developer';
+import 'dart:math' as math;
 
 import 'dart:typed_data';
 
@@ -137,7 +138,7 @@ abstract class Tracker {
         interval = minInter;
       } else {
         if (minInter != null) {
-          interval = min(inter, minInter);
+          interval = math.min(inter, minInter);
         } else {
           interval = inter;
         }
@@ -182,9 +183,13 @@ abstract class Tracker {
   }
 
   void _clean() {
+    stopIntervalAnnounce();
     _peerEventHandlers.clear();
     _announceErrorHandlers.clear();
     _announceOverHandlers.clear();
+  }
+
+  void stopIntervalAnnounce() {
     _announceTimer?.cancel();
     _announceTimer = null;
   }
@@ -217,10 +222,15 @@ abstract class Tracker {
   Future<PeerEvent> complete() async {
     if (isDisposed) throw Exception('This tracker was disposed');
     if (_stopped) return null;
-    var re = await announce(EVENT_COMPLETED, await _announceOptions);
-    re.eventType = EVENT_COMPLETED;
-    _firePeerEvent(re);
-    return re;
+    try {
+      var re = await announce(EVENT_COMPLETED, await _announceOptions);
+      re.eventType = EVENT_COMPLETED;
+      _firePeerEvent(re);
+      return re;
+    } catch (e) {
+      log('访问错误:', error: e, name: runtimeType.toString());
+      return null;
+    }
   }
 
   ///

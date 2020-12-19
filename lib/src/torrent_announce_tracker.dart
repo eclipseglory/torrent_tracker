@@ -135,13 +135,15 @@ class TorrentAnnounceTracker {
   }
 
   /// Ask all trackers to complete;
-  Future<List<PeerEvent>> complete() {
+  Future<List<PeerEvent>> complete() async {
     var list = <Future<PeerEvent>>[];
-    _cleanup();
     trackers.forEach((id, tracker) {
+      tracker.stopIntervalAnnounce();
       list.add(tracker.complete());
     });
-    return Stream.fromFutures(list).toList();
+    var re = await Stream.fromFutures(list).toList();
+    // _cleanup();
+    return re;
   }
 
   Future startTracker(String id) async {
