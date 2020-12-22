@@ -95,7 +95,7 @@ mixin HttpTrackerBase {
 
   ///
   /// close the http client
-  void clean() {
+  void close() {
     _httpClient?.close(force: true);
     _httpClient = null;
   }
@@ -123,9 +123,9 @@ mixin HttpTrackerBase {
         response.listen((bytes) {
           data.addAll(bytes);
         }, onDone: () {
-          var result;
+          if (completer.isCompleted) return;
           try {
-            result = processResponseData(Uint8List.fromList(data));
+            var result = processResponseData(Uint8List.fromList(data));
             completer.complete(result);
           } catch (e) {
             completer.completeError(e);

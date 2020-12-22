@@ -70,4 +70,20 @@ class UDPTracker extends Tracker with UDPTrackerBase {
     }
     return event;
   }
+
+  @override
+  Future dispose([dynamic reason]) {
+    close();
+    return super.dispose(reason);
+  }
+
+  @override
+  void handleSocketDone() {
+    dispose('远程/本地 关闭了连接');
+  }
+
+  @override
+  void handleSocketError(e) {
+    dispose(e);
+  }
 }

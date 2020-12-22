@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:developer';
 import 'dart:io';
 
 import 'dart:typed_data';
@@ -63,7 +62,7 @@ mixin UDPTrackerBase {
   /// 参数completer是一个`Completer`实例。用于截获发生的异常，并通过completeError截获
   void _connect(Completer completer, Map options) async {
     var uri = this.uri;
-    if (uri == null) _returnError(completer, '目标地址Uri不能为空');
+    if (uri == null) throw ('目标地址Uri不能为空');
     var list = <int>[];
     list.addAll(START_CONNECTION_ID); //这是个magic id
     list.addAll(ACTION_CONNECT);
@@ -72,15 +71,8 @@ mixin UDPTrackerBase {
     try {
       await _sendMessage(messageBytes, uri.host, uri.port);
     } catch (e) {
-      _returnError(completer, e);
+      rethrow;
     }
-  }
-
-  ///
-  /// 退出整个通信并让completer获取到异常
-  void _returnError(Completer completer, dynamic error) {
-    _clean();
-    completer.completeError(error);
   }
 
   /// 和Remote通信的入口函数。返回一个Future
@@ -90,40 +82,45 @@ mixin UDPTrackerBase {
     _socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
 
     var eventStream = _socket.timeout(TIME_OUT, onTimeout: (e) {
-      _clean();
       if (!completer.isCompleted) {
-        completer.completeError(SocketException('Time Out'));
+        completer.completeError(e);
       }
     });
 
-    eventStream.listen((event) {
+    eventStream.listen((event) async {
       if (event == RawSocketEvent.read) {
         var datagram = _socket.receive();
         if (datagram == null || datagram.data.length < 8) {
-          _clean();
+          close();
           completer.completeError('Transaction ID from tracker is wrong');
           return;
         }
-        _processAnnounceResponseData(datagram.data, completer, options);
+        try {
+          var re = await _processAnnounceResponseData(datagram.data, options);
+          if (re != null) completer.complete(re);
+        } catch (e) {
+          completer.completeError(e);
+        }
       }
     }, onError: (e) {
-      _clean();
-      completer.completeError(e);
+      handleSocketError(e);
     }, onDone: () {
-      _clean();
-      if (!completer.isCompleted) completer.completeError('Remote closed');
+      handleSocketDone();
     });
 
     // 第一步，连接对方
     try {
       await _connect(completer, options);
     } catch (e) {
-      _clean();
-      if (!completer.isCompleted) completer.completeError(e);
+      completer.completeError(e);
       return completer.future;
     }
     return completer.future;
   }
+
+  void handleSocketDone();
+
+  void handleSocketError(e);
 
   /// 处理一次通信最终从remote获得的数据.
   ///
@@ -136,16 +133,16 @@ mixin UDPTrackerBase {
 
   ///
   /// 第一次连接成功后，发送第二次信息
-  void _announce(Completer completer, Uint8List connectionId, Map options) {
+  Future _announce(Uint8List connectionId, Map options) async {
     var message = generateSecondTouchMessage(connectionId, options);
     var uri = this.uri;
-    if (uri == null) _returnError(completer, '目标地址Uri不能为空');
+    if (uri == null) {
+      throw '目标地址Uri不能为空';
+    }
     if (message == null || message.isEmpty) {
-      _returnError(completer, '发送数据不能为空');
+      throw '发送数据不能为空';
     } else {
-      _sendMessage(message, uri.host, uri.port).catchError((e) {
-        _returnError(completer, e);
-      });
+      return _sendMessage(message, uri.host, uri.port);
     }
   }
 
@@ -153,60 +150,42 @@ mixin UDPTrackerBase {
   ///
   /// 该方法并不会直接去处理Remote返回的最终消息，而且固定了整个通信流程。
   /// 该方法会去处理在第一次发送信息后收到消息，然后到接收到第二次消息的整个过程
-  void _processAnnounceResponseData(
-      Uint8List data, Completer completer, Map options) {
+  Future _processAnnounceResponseData(Uint8List data, Map options) async {
     var view = ByteData.view(data.buffer);
     var tid = view.getUint32(4);
     if (tid == transcationIdNum) {
       var action = view.getUint32(0);
       // 表明连接成功，可以进行announce
       if (action == 0) {
-        try {
-          _connectionId = data.sublist(8, 16); // 返回信息的第8-16位是下次连接的connection id
-          _announce(completer, _connectionId, options); // 继续，不要停
-        } catch (e) {
-          _clean();
-          completer.completeError(e);
-        }
+        _connectionId = data.sublist(8, 16); // 返回信息的第8-16位是下次连接的connection id
+        await _announce(_connectionId, options); // 继续，不要停
         return;
       }
       // 发生错误
       if (action == 3) {
-        _clean();
+        close();
         var errorMsg = String.fromCharCodes(data.sublist(8));
-        completer.completeError(errorMsg);
-        return;
+        throw errorMsg;
       }
       // announce获得返回结果
-      _clean(); // Announce获得结果后就关闭socket不再监听。
-      var result;
-      try {
-        result = processResponseData(data, action);
-      } catch (e) {
-        completer.completeError(e);
-        return;
-      }
-      completer.complete(result);
-      return;
+      close(); // Announce获得结果后就关闭socket不再监听。
+      return processResponseData(data, action);
     }
   }
 
   /// 关闭套接字
-  void _clean() {
+  void close() {
     _socket?.close();
     _socket = null;
   }
 
   /// 发送数据包到指定的ip地址
   Future _sendMessage(Uint8List message, String host, int port) async {
-    try {
-      var ips = await InternetAddress.lookup(host);
-      for (var i = 0; i < ips.length; i++) {
-        var ip = ips[i];
-        await _socket?.send(message, ip, port);
-      }
-    } catch (e) {
-      log('Send Message Error', error: e, name: runtimeType.toString());
+    // try {
+    var ips = await InternetAddress.lookup(host);
+    for (var i = 0; i < ips.length; i++) {
+      var ip = ips[i];
+      _socket?.send(message, ip, port);
     }
   }
 }

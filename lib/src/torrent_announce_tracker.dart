@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:developer';
 import 'dart:typed_data';
 
 import 'package:torrent_tracker/src/tracker/peer_event.dart';
@@ -25,7 +24,7 @@ class TorrentAnnounceTracker {
 
   Map<String, Tracker> trackers;
 
-  List<Uri> announces;
+  final List<Uri> announces;
 
   TrackerGenerator trackerGenerator;
 
@@ -38,6 +37,9 @@ class TorrentAnnounceTracker {
   final Set<AnnounceOverHandler> _announceOverHandlers = {};
 
   final Set<PeerEventHandler> _peerEventHandlers = {};
+
+  final Set<void Function(Tracker tracker, dynamic reason)>
+      _trackerDisposedHandlers = {};
 
   final Set<String> _announceOverTrackers = {};
 
@@ -105,29 +107,28 @@ class TorrentAnnounceTracker {
 
   /// Start all trackers;
   /// If trackers dont be created , just generate all trackers;
-  void start([bool errorOrRemove = false]) async {
+  Future<List<bool>> start([bool errorOrRemove = true]) {
+    var list = <Future<bool>>[];
     trackers = createTrackers(announces);
-    log('开始运行announce....');
     trackers.forEach((id, tracker) {
-      tracker.start(errorOrRemove);
+      list.add(tracker.start(errorOrRemove));
     });
+    return Stream.fromFutures(list).toList();
   }
 
-  /// Check if all trackers has been stopped
-  bool _checkTrackersStatus() {
-    for (var id in trackers.keys) {
-      var tracker = trackers[id];
-      if (!tracker.isStopped) {
-        return false;
-      }
-    }
-    return true;
+  Future<List<bool>> restart([bool errorOrRemove = true]) {
+    var list = <Future<bool>>[];
+    trackers ??= createTrackers(announces);
+    trackers.forEach((id, tracker) {
+      list.add(tracker.restart(errorOrRemove));
+    });
+    return Stream.fromFutures(list).toList();
   }
 
   /// Stop all trackers;
   Future<List<PeerEvent>> stop([bool force = false]) {
     var list = <Future<PeerEvent>>[];
-    _cleanup();
+    trackers ??= createTrackers(announces);
     trackers.forEach((id, tracker) {
       list.add(tracker.stop(force));
     });
@@ -137,13 +138,11 @@ class TorrentAnnounceTracker {
   /// Ask all trackers to complete;
   Future<List<PeerEvent>> complete() async {
     var list = <Future<PeerEvent>>[];
+    trackers ??= createTrackers(announces);
     trackers.forEach((id, tracker) {
-      tracker.stopIntervalAnnounce();
       list.add(tracker.complete());
     });
-    var re = await Stream.fromFutures(list).toList();
-    // _cleanup();
-    return re;
+    return Stream.fromFutures(list).toList();
   }
 
   Future startTracker(String id) async {
@@ -192,20 +191,44 @@ class TorrentAnnounceTracker {
     return trackers;
   }
 
-  void onAnnounceError(void Function(Tracker source, dynamic error) f) {
-    _announceErrorHandlers.add(f);
+  bool onAnnounceError(void Function(Tracker source, dynamic error) f) {
+    return _announceErrorHandlers.add(f);
   }
 
-  void onAnnounceOver(void Function(Tracker source, int time) f) {
-    _announceOverHandlers.add(f);
+  bool offAnnounceError(void Function(Tracker source, dynamic error) f) {
+    return _announceErrorHandlers.remove(f);
   }
 
-  void onPeerEvent(void Function(Tracker source, PeerEvent event) f) {
-    _peerEventHandlers.add(f);
+  bool onAnnounceOver(void Function(Tracker source, int time) f) {
+    return _announceOverHandlers.add(f);
   }
 
-  void onAllAnnounceOver(void Function(int totalTrackers) h) {
-    _announceAllOverOneTurnHandlers.add(h);
+  bool offAnnounceOver(void Function(Tracker source, int time) f) {
+    return _announceOverHandlers.remove(f);
+  }
+
+  bool onPeerEvent(void Function(Tracker source, PeerEvent event) f) {
+    return _peerEventHandlers.add(f);
+  }
+
+  bool offPeerEvent(void Function(Tracker source, PeerEvent event) f) {
+    return _peerEventHandlers.remove(f);
+  }
+
+  bool onTrackerDispose(void Function(Tracker source, dynamic reason) f) {
+    return _trackerDisposedHandlers.add(f);
+  }
+
+  bool offTrackerDispose(void Function(Tracker source, dynamic reason) f) {
+    return _trackerDisposedHandlers.remove(f);
+  }
+
+  bool onAllAnnounceOver(void Function(int totalTrackers) h) {
+    return _announceAllOverOneTurnHandlers.add(h);
+  }
+
+  bool offAllAnnounceOver(void Function(int totalTrackers) h) {
+    return _announceAllOverOneTurnHandlers.remove(h);
   }
 
   void _fireAnnounceError(Tracker trakcer, dynamic error) {
@@ -231,12 +254,18 @@ class TorrentAnnounceTracker {
     _announceAllOverOneTurnHandlers.forEach((h) {
       Timer.run(() => h(trackers.length));
     });
-    // Timer.run(() => )
   }
 
   void _firePeerEvent(Tracker trakcer, PeerEvent event) {
     _peerEventHandlers.forEach((f) {
       Timer.run(() => f(trakcer, event));
+    });
+  }
+
+  void _fireTrackerDisposed(Tracker trakcer, dynamic reason) {
+    trackers.remove(trakcer.id);
+    _trackerDisposedHandlers.forEach((f) {
+      Timer.run(() => f(trakcer, reason));
     });
   }
 
@@ -250,6 +279,9 @@ class TorrentAnnounceTracker {
     tracker.onAnnounceError((error) => _fireAnnounceError(tracker, error));
     tracker.onAnnounceOver((time) => _fireAnnounceOver(tracker, time));
     tracker.onPeerEvent((event) => _firePeerEvent(tracker, event));
+    tracker.onDisposed(_fireTrackerDisposed);
+    tracker.onCompleteEvent((event) => _firePeerEvent(tracker, event));
+    tracker.onStopEvent((event) => _firePeerEvent(tracker, event));
   }
 
   Future dispose() async {

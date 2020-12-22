@@ -32,21 +32,21 @@ class HttpTracker extends Tracker with HttpTrackerBase {
   @override
   Future<PeerEvent> stop([bool force = false]) {
     var f = super.stop(force);
-    clean();
+    close();
     return f;
   }
 
   @override
   Future<PeerEvent> complete() {
     var f = super.complete();
-    clean();
+    close();
     return f;
   }
 
   @override
-  Future dispose() async {
-    clean();
-    return super.dispose();
+  Future dispose([dynamic reason]) async {
+    close();
+    return super.dispose(reason);
   }
 
   @override

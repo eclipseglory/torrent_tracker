@@ -4,6 +4,8 @@ import 'dart:math' as math;
 
 import 'dart:typed_data';
 
+import 'package:torrent_tracker/src/tracker/tracker_base.dart';
+
 import 'peer_event.dart';
 
 const EVENT_STARTED = 'started';
@@ -27,7 +29,6 @@ abstract class Tracker {
 
   /// server url;
   final Uri announceUrl;
-  bool _stopped = true;
 
   /// 循环访问announce url的间隔时间，单位秒，默认值30分钟
   int _announceInterval = 30 * 60; // 30 minites
@@ -37,6 +38,13 @@ abstract class Tracker {
 
   final Set<void Function(PeerEvent)> _peerEventHandlers = {};
 
+  final Set<void Function(PeerEvent)> _stopEventHandlers = {};
+
+  final Set<void Function(PeerEvent)> _completeEventHandlers = {};
+
+  final Set<void Function(Tracker tracker, dynamic reason)>
+      _disposeEventHandlers = {};
+
   final Set<void Function(dynamic error)> _announceErrorHandlers = {};
 
   final Set<void Function(int intervalTime)> _announceOverHandlers = {};
@@ -44,6 +52,8 @@ abstract class Tracker {
   Timer _announceTimer;
 
   bool _disposed = false;
+
+  dynamic _disposedReason;
 
   AnnounceOptionsProvider provider;
 
@@ -64,56 +74,36 @@ abstract class Tracker {
     return _infoHash;
   }
 
+  bool get isDisposed => _disposed;
+
   ///
   /// 开始循环发起announce访问。
   ///
-  Future<bool> start([bool errorOrCancel = false]) async {
+  Future<bool> start([bool errorOrCancel = true]) async {
     if (isDisposed) throw Exception('This tracker was disposed');
-    if (!_stopped) return false; // Stream.value(false);
-    _stopped = false;
     return _intervalAnnounce(null, EVENT_STARTED, errorOrCancel);
   }
 
-  void onAnnounceError(void Function(dynamic error) handler) {
-    _announceErrorHandlers.add(handler);
-  }
-
-  void onPeerEvent(void Function(PeerEvent) handler) {
-    _peerEventHandlers.add(handler);
-  }
-
-  void onAnnounceOver(void Function(int intervalTime) handler) {
-    _announceOverHandlers.add(handler);
-  }
-
-  void _firePeerEvent(PeerEvent event) {
-    _peerEventHandlers.forEach((handler) {
-      Timer.run(() => handler(event));
-    });
-  }
-
-  void _fireAnnounceError(dynamic error) {
-    _announceErrorHandlers.forEach((handler) {
-      Timer.run(() => handler(error));
-    });
-  }
-
-  void _fireAnnounceOver(int intervalTime) {
-    _announceOverHandlers.forEach((handler) {
-      Timer.run(() => handler(intervalTime));
-    });
+  ///
+  /// 重新开始循环发起announce访问。
+  ///
+  Future<bool> restart([bool errorOrCancel = true]) async {
+    if (isDisposed) throw Exception('This tracker was disposed');
+    stopIntervalAnnounce();
+    return start(errorOrCancel);
   }
 
   ///
-  /// 该方法会一直循环Announce，直到stopped属性为true。
+  /// 该方法会一直循环Announce，直到被disposed。
   /// 每次循环访问的间隔时间是announceInterval，子类在实现announce方法的时候返回值需要加入interval值，
   /// 这里会比较返回值和现有值，如果不同会停止当前的Timer并重新生成一个新的循环间隔Timer
   ///
   /// 如果announce抛出异常，该循环不会停止,除非[errorOrCancel]设置位 `true`
   Future<bool> _intervalAnnounce(Timer timer, String event,
-      [bool errorOrCancel = false]) async {
-    if (isStopped) {
+      [bool errorOrCancel = true]) async {
+    if (isDisposed) {
       timer?.cancel();
+      timer = null;
       return false;
     }
     PeerEvent result;
@@ -122,12 +112,14 @@ abstract class Tracker {
       result.eventType = event;
       _firePeerEvent(result);
     } catch (e) {
-      _fireAnnounceError(e);
       if (errorOrCancel) {
         timer?.cancel();
         timer = null;
-        _fireAnnounceOver(_announceInterval);
+        _fireAnnounceOver(-1);
+        await dispose(e);
         return false;
+      } else {
+        _fireAnnounceError(e);
       }
     }
     var interval;
@@ -160,10 +152,11 @@ abstract class Tracker {
     return true;
   }
 
-  bool get isDisposed => _disposed;
-
-  Future dispose() async {
+  Future dispose([dynamic reason]) async {
+    if (_disposed) return;
+    _disposedReason = reason;
     _disposed = true;
+    _fireDisposed(reason);
     _clean();
   }
 
@@ -187,6 +180,8 @@ abstract class Tracker {
     _peerEventHandlers.clear();
     _announceErrorHandlers.clear();
     _announceOverHandlers.clear();
+    _stopEventHandlers.clear();
+    _completeEventHandlers.clear();
   }
 
   void stopIntervalAnnounce() {
@@ -203,16 +198,21 @@ abstract class Tracker {
   /// 发送`stopped`请求，而是直接返回一个`null`
   Future<PeerEvent> stop([bool force = false]) async {
     if (isDisposed) throw Exception('This tracker was disposed');
-    if (_stopped) return null;
-    _clean();
-    _stopped = true;
+    stopIntervalAnnounce();
     if (force) {
+      _fireStopEvent(null);
       return null;
     }
-    var re = await announce(EVENT_STOPPED, await _announceOptions);
-    re.eventType = EVENT_STOPPED;
-    _firePeerEvent(re);
-    return re;
+    try {
+      var re = await announce(EVENT_STOPPED, await _announceOptions);
+      re.eventType = EVENT_STOPPED;
+      _fireStopEvent(re);
+      return re;
+    } catch (e) {
+      log('发送Stop访问错误:', error: e, name: runtimeType.toString());
+      await dispose();
+      return null;
+    }
   }
 
   ///
@@ -221,14 +221,14 @@ abstract class Tracker {
   /// 该方法会调用一次announce，参数位completed。
   Future<PeerEvent> complete() async {
     if (isDisposed) throw Exception('This tracker was disposed');
-    if (_stopped) return null;
+    stopIntervalAnnounce();
     try {
       var re = await announce(EVENT_COMPLETED, await _announceOptions);
       re.eventType = EVENT_COMPLETED;
-      _firePeerEvent(re);
+      _fireCompleteEvent(re);
       return re;
     } catch (e) {
-      log('访问错误:', error: e, name: runtimeType.toString());
+      await dispose(e);
       return null;
     }
   }
@@ -244,8 +244,88 @@ abstract class Tracker {
   /// 不同，那么Tracker就会停止当前的Timer并重新创建一个Timer，间隔时间设置为返回对象中的interval值
   Future<PeerEvent> announce(String eventType, Map<String, dynamic> options);
 
-  bool get isStopped {
-    return _stopped;
+  bool onAnnounceError(void Function(dynamic error) handler) {
+    return _announceErrorHandlers.add(handler);
+  }
+
+  bool offAnnounceError(void Function(dynamic error) handler) {
+    return _announceErrorHandlers.remove(handler);
+  }
+
+  bool onPeerEvent(void Function(PeerEvent) handler) {
+    return _peerEventHandlers.add(handler);
+  }
+
+  bool offPeerEvent(void Function(PeerEvent) handler) {
+    return _peerEventHandlers.remove(handler);
+  }
+
+  bool onStopEvent(void Function(PeerEvent) handler) {
+    return _stopEventHandlers.add(handler);
+  }
+
+  bool offStopEvent(void Function(PeerEvent) handler) {
+    return _stopEventHandlers.remove(handler);
+  }
+
+  bool onCompleteEvent(void Function(PeerEvent) handler) {
+    return _completeEventHandlers.add(handler);
+  }
+
+  bool offCompleteEvent(void Function(PeerEvent) handler) {
+    return _completeEventHandlers.remove(handler);
+  }
+
+  bool onAnnounceOver(void Function(int intervalTime) handler) {
+    return _announceOverHandlers.add(handler);
+  }
+
+  bool offAnnounceOver(void Function(int intervalTime) handler) {
+    return _announceOverHandlers.remove(handler);
+  }
+
+  bool onDisposed(void Function(Tracker tracker, dynamic reason) handler) {
+    return _disposeEventHandlers.add(handler);
+  }
+
+  bool offDisposed(void Function(Tracker) handler) {
+    return _disposeEventHandlers.remove(handler);
+  }
+
+  void _firePeerEvent(PeerEvent event) {
+    _peerEventHandlers.forEach((handler) {
+      Timer.run(() => handler(event));
+    });
+  }
+
+  void _fireStopEvent(PeerEvent event) {
+    _stopEventHandlers.forEach((handler) {
+      Timer.run(() => handler(event));
+    });
+  }
+
+  void _fireCompleteEvent(PeerEvent event) {
+    _completeEventHandlers.forEach((handler) {
+      Timer.run(() => handler(event));
+    });
+  }
+
+  void _fireAnnounceError(dynamic error) {
+    _announceErrorHandlers.forEach((handler) {
+      Timer.run(() => handler(error));
+    });
+  }
+
+  void _fireAnnounceOver(int intervalTime) {
+    _announceOverHandlers.forEach((handler) {
+      Timer.run(() => handler(intervalTime));
+    });
+  }
+
+  void _fireDisposed([dynamic reason]) {
+    _disposeEventHandlers.forEach((handler) {
+      Timer.run(() => handler(this, reason));
+    });
   }
 }
 

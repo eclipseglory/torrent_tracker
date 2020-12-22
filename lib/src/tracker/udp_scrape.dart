@@ -59,4 +59,14 @@ class UDPScrape extends Scrape with UDPTrackerBase {
 
   @override
   Uri get uri => scrapeUrl;
+
+  @override
+  void handleSocketDone() {
+    // TODO: implement handleSocketDone
+  }
+
+  @override
+  void handleSocketError(e) {
+    // TODO: implement handleSocketError
+  }
 }

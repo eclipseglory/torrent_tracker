@@ -72,15 +72,6 @@ class HttpScrape extends Scrape with HttpTrackerBase {
       }
     });
     return event;
-    // if (result['files'] != null) {
-    //   var list = result['files'];
-    //   for (var key in list.keys) {
-    //     files[transformBufferToHexString((key as String).codeUnits)] =
-    //         list[key];
-    //   }
-    //   result['files'] = files;
-    // }
-    // return result;
   }
 
   @override
@@ -92,7 +83,7 @@ class HttpScrape extends Scrape with HttpTrackerBase {
     } catch (e) {
       log('Scrape Error : $url', error: e, name: runtimeType.toString());
     } finally {
-      clean();
+      close();
     }
   }
 
