@@ -270,7 +270,7 @@ class TorrentAnnounceTracker {
   }
 
   void addPeer(Uri host, Uri peer, String infoHash) {
-    var event = PeerEvent(infoHash, peer);
+    var event = PeerEvent(infoHash, host);
     event.addPeer(peer);
     _firePeerEvent(null, event);
   }
