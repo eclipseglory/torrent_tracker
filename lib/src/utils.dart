@@ -1,25 +1,4 @@
-import 'dart:math' as math;
 import 'dart:typed_data';
-
-Uint8List randomBytes(count) {
-  var random = math.Random();
-  var bytes = Uint8List(count);
-  for (var i = 0; i < count; i++) {
-    bytes[i] = random.nextInt(254);
-  }
-  return bytes;
-}
-
-///
-/// Transform buffer to hex string
-String transformBufferToHexString(List<int> buffer) {
-  var str = buffer.fold<String>('', (previousValue, byte) {
-    var hex = byte.toRadixString(16);
-    if (hex.length != 2) hex = '0' + hex;
-    return previousValue + hex;
-  });
-  return str;
-}
 
 String transformToScrapeUrl(String url) {
   var lastIndex = url.lastIndexOf('/');
@@ -97,16 +76,3 @@ dynamic getPeerIPv4(ByteData byteView, [int offset = 0]) {
   // }
 }
 
-List getPeerIPv4List(Uint8List bytes) {
-  var list = [];
-  if (bytes == null || bytes.isEmpty) return list;
-  if (bytes.length % 6 != 0) {
-    throw Exception('buf length isn\'t multiple of compact IP/PORTs (6 bytes)');
-  }
-  var view = ByteData.view(bytes.buffer);
-
-  for (var i = 0; i < bytes.length; i += 6) {
-    list.add(getPeerIPv4(view, i));
-  }
-  return list;
-}

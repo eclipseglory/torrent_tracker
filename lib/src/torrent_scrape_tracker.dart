@@ -1,8 +1,9 @@
 import 'dart:typed_data';
 
-import 'utils.dart';
 import 'scraper_generator.dart';
 import 'tracker/tracker_base.dart';
+
+import 'package:dartorrent_common/dartorrent_common.dart';
 
 /// Torrent scrape tracker
 class TorrentScrapeTracker {

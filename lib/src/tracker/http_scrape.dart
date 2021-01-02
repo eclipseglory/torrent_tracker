@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:developer';
 import 'dart:typed_data';
-import 'package:bencode_dart/bencode_dart.dart' as bencode;
-import 'scrape_event.dart';
-import '../utils.dart';
 
+import 'package:dartorrent_common/dartorrent_common.dart';
+import 'package:bencode_dart/bencode_dart.dart' as bencode;
+
+import 'scrape_event.dart';
 import 'http_tracker_base.dart';
 import 'scrape.dart';
 

@@ -111,6 +111,7 @@ mixin HttpTrackerBase {
     try {
       url = _createAccessURL(options);
     } catch (e) {
+      close();
       completer.completeError(e);
       return completer.future;
     }
@@ -128,15 +129,19 @@ mixin HttpTrackerBase {
             var result = processResponseData(Uint8List.fromList(data));
             completer.complete(result);
           } catch (e) {
+            close();
             completer.completeError(e);
           }
         }, onError: (e) {
+          close();
           completer.completeError(e); // 截获获取响应时候的错误
         });
       } else {
+        close();
         completer.completeError('status code: ${response.statusCode}');
       }
     } catch (e) {
+      close();
       completer.completeError(e);
     }
     return completer.future;

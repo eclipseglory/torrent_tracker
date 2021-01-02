@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:bencode_dart/bencode_dart.dart';
+import 'package:dartorrent_common/dartorrent_common.dart';
 import 'peer_event.dart';
 import 'http_tracker_base.dart';
 import 'tracker.dart';
@@ -18,7 +21,8 @@ class HttpTracker extends Tracker with HttpTrackerBase {
   String _currentEvent;
   HttpTracker(Uri _uri, Uint8List infoHashBuffer,
       {AnnounceOptionsProvider provider})
-      : super('${_uri.origin}${_uri.path}', _uri, infoHashBuffer,
+      : super(
+            'http:${_uri.host}:${_uri.port}${_uri.path}', _uri, infoHashBuffer,
             provider: provider);
 
   String get currentTrackerId {
@@ -153,12 +157,22 @@ class HttpTracker extends Tracker with HttpTrackerBase {
       }
       if (key == 'peers' && value != null) {
         if (value is Uint8List) {
-          var peers = utils.getPeerIPv4List(value);
+          var peers = CompactAddress.parseIPv4Addresses(value);
           peers.forEach((peer) => event.addPeer(peer));
         } else {
           if (value is List) {
             value.forEach((peer) {
-              event.addPeer(Uri(host: peer.ip, port: peer.port));
+              var ip = peer.ip;
+              var port = peer.port;
+              var address = InternetAddress.tryParse(ip);
+              if (address != null) {
+                try {
+                  event.addPeer(CompactAddress(address, port));
+                } catch (e) {
+                  log('parse peer address error',
+                      error: e, name: runtimeType.toString());
+                }
+              }
             });
           }
         }
@@ -166,6 +180,7 @@ class HttpTracker extends Tracker with HttpTrackerBase {
       }
 
       if (key == 'peers6' && value != null) {
+        print('You IPV6');
         // TODO process IPv6
       }
       // record the values don't process

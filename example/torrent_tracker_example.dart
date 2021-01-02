@@ -1,48 +1,61 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
-import 'dart:typed_data';
-import 'dart:math' as math;
+import 'dart:io';
+
+import 'package:dartorrent_common/dartorrent_common.dart';
 
 import 'package:torrent_tracker/src/torrent_scrape_tracker.dart';
 import 'package:torrent_tracker/src/torrent_announce_tracker.dart';
 import 'package:torrent_tracker/torrent_tracker.dart';
-import 'package:torrent_tracker/src/tracker/peer_event.dart';
 import 'package:torrent_model/torrent_model.dart';
 
 void main() async {
+  // var test = () async {
+  //   var c = Completer();
+  //   throw 'e';
+  //   return c.future;
+  // };
+
+  // test().then((value) => null).catchError((e) {
+  //   print(e);
+  // });
+
+  // exit(1);
+
   var torrent = await Torrent.parse('example/test.torrent');
   var id = generatePeerId();
   var port = 55551;
   var provider = SimpleProvider(torrent, id, port);
   try {
-    var torrentTracker = TorrentAnnounceTracker(
-        torrent.announces.toList(), torrent.infoHashBuffer, provider);
+    var torrentTracker =
+        TorrentAnnounceTracker(torrent.infoHashBuffer, provider);
     torrentTracker.onAnnounceError((source, error) {
-      // print('${source.announceUrl} : $error');
-      torrentTracker.removeTracker(source.id);
+      log('announce error:', error: error);
     });
     torrentTracker.onPeerEvent((source, event) {
-      // print('${source.announceUrl} : $event');
+      print('${source.announceUrl} peer event: $event');
     });
 
     torrentTracker.onAnnounceOver((source, time) {
-      // print('${source.announceUrl} : $time');
+      print('${source.announceUrl} announce over!: $time');
+      source.dispose();
     });
 
-    torrentTracker.onAllAnnounceOver((total) {
-      log('全部走一遍，共有 $total trackers');
-    });
+    // torrentTracker.onAllAnnounceOver((total) {
+    //   log('全部走一遍，共有 $total trackers');
+    // });
+    torrentTracker.addAnnounces(torrent.announces.toList(), false);
 
-    torrentTracker.start(true);
+    torrentTracker.startAll();
 
-    var scrapeTracker = TorrentScrapeTracker();
-    scrapeTracker.createScrapeFromAnnounces(
-        torrent.announces.toList(), torrent.infoHashBuffer);
-    // print(scrapeTracker);
-    scrapeTracker.scrape().listen((event) {
-      print(event);
-    }, onError: (e) => log('error:', error: e));
+    // var scrapeTracker = TorrentScrapeTracker();
+    // scrapeTracker.createScrapeFromAnnounces(
+    //     torrent.announces.toList(), torrent.infoHashBuffer);
+    // // print(scrapeTracker);
+    // scrapeTracker.scrape().listen((event) {
+    //   print(event);
+    // }, onError: (e) => log('error:', error: e, name: 'MAIN'));
   } catch (e) {
     print(e);
   }
@@ -69,15 +82,6 @@ class SimpleProvider implements AnnounceOptionsProvider {
       'port': port
     });
   }
-}
-
-Uint8List randomBytes(count) {
-  var random = math.Random();
-  var bytes = Uint8List(count);
-  for (var i = 0; i < count; i++) {
-    bytes[i] = random.nextInt(254);
-  }
-  return bytes;
 }
 
 String generatePeerId() {

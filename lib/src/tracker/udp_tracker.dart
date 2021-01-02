@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:developer';
 import 'dart:typed_data';
 
+import 'package:dartorrent_common/dartorrent_common.dart';
+
 import 'peer_event.dart';
 
 import 'udp_tracker_base.dart';
@@ -14,7 +16,7 @@ class UDPTracker extends Tracker with UDPTrackerBase {
   String _currentEvent;
   UDPTracker(Uri _uri, Uint8List infoHashBuffer,
       {AnnounceOptionsProvider provider})
-      : super('${_uri.host}:${_uri.port}', _uri, infoHashBuffer,
+      : super('udp:${_uri.host}:${_uri.port}', _uri, infoHashBuffer,
             provider: provider);
 
   String get currentEvent {
@@ -62,11 +64,16 @@ class UDPTracker extends Tracker with UDPTrackerBase {
         interval: view.getUint32(8),
         incomplete: view.getUint32(16),
         complete: view.getUint32(12));
+    var ips = data.sublist(20);
     try {
-      getPeerIPv4List(data.sublist(20)).forEach((url) => event.addPeer(url));
+      var list = CompactAddress.parseIPv4Addresses(ips);
+      list?.forEach((c) {
+        event.addPeer(c);
+      });
     } catch (e) {
       // 容错
-      log('解析peer ip 出错', name: runtimeType.toString(), error: e);
+      log('解析peer ip 出错 : $ips , ${ips.length}',
+          name: runtimeType.toString(), error: e);
     }
     return event;
   }

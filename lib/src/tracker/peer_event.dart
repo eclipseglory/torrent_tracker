@@ -1,4 +1,7 @@
+import 'package:dartorrent_common/dartorrent_common.dart';
+
 import 'tracker_event_base.dart';
+import 'package:dartorrent_common/dartorrent_common.dart';
 
 ///
 /// This class recorded the response from remote when tracker access announce successfully
@@ -34,7 +37,7 @@ class PeerEvent extends TrackerEventBase {
   String warning;
 
   /// peer uri set
-  Set<Uri> peers = <Uri>{};
+  Set<CompactAddress> peers = <CompactAddress>{};
 
   PeerEvent(this.infoHash, this.serverHost,
       {this.complete,
@@ -44,12 +47,12 @@ class PeerEvent extends TrackerEventBase {
       this.warning});
 
   /// Add a peer uri
-  bool addPeer(Uri peer) {
+  bool addPeer(CompactAddress peer) {
     return peers.add(peer);
   }
 
   /// Remove a peer uri
-  bool removePeer(Uri peer) {
+  bool removePeer(CompactAddress peer) {
     return peers.remove(peer);
   }
 

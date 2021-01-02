@@ -22,9 +22,7 @@ class TorrentAnnounceTracker {
   /// Torrent file info hash bytebuffer
   Uint8List infoHashBuffer;
 
-  Map<String, Tracker> trackers;
-
-  final List<Uri> announces;
+  final Set<Tracker> _trackers = {};
 
   TrackerGenerator trackerGenerator;
 
@@ -32,7 +30,7 @@ class TorrentAnnounceTracker {
 
   final Set<AnnounceErrorHandler> _announceErrorHandlers = {};
 
-  final Set<void Function(int total)> _announceAllOverOneTurnHandlers = {};
+  // final Set<void Function(int total)> _announceAllOverOneTurnHandlers = {};
 
   final Set<AnnounceOverHandler> _announceOverHandlers = {};
 
@@ -41,7 +39,7 @@ class TorrentAnnounceTracker {
   final Set<void Function(Tracker tracker, dynamic reason)>
       _trackerDisposedHandlers = {};
 
-  final Set<String> _announceOverTrackers = {};
+  // final Set<String> _announceOverTrackers = {};
 
   /// [infoHashBuffer] is torrent info hash bytebuffer.
   ///
@@ -96,10 +94,9 @@ class TorrentAnnounceTracker {
   ///   }
   /// }
   /// ```
-  TorrentAnnounceTracker(this.announces, this.infoHashBuffer, this.provider,
+  TorrentAnnounceTracker(this.infoHashBuffer, this.provider,
       {this.trackerGenerator}) {
     trackerGenerator ??= TrackerGenerator.base();
-    assert(announces != null, 'announces cant be null');
     assert(provider != null, 'provider cant be null');
     assert(infoHashBuffer != null && infoHashBuffer.isNotEmpty,
         'infoHashBuffer cant be null or empty');
@@ -107,88 +104,110 @@ class TorrentAnnounceTracker {
 
   /// Start all trackers;
   /// If trackers dont be created , just generate all trackers;
-  Future<List<bool>> start([bool errorOrRemove = true]) {
+  Future<List<bool>> startAll() async {
     var list = <Future<bool>>[];
-    trackers = createTrackers(announces);
-    trackers.forEach((id, tracker) {
-      list.add(tracker.start(errorOrRemove));
+    _trackers.forEach((tracker) {
+      list.add(tracker.start(true));
     });
     return Stream.fromFutures(list).toList();
   }
 
-  Future<List<bool>> restart([bool errorOrRemove = true]) {
+  Future<List<bool>> restartAll() {
     var list = <Future<bool>>[];
-    trackers ??= createTrackers(announces);
-    trackers.forEach((id, tracker) {
-      list.add(tracker.restart(errorOrRemove));
+    _trackers.forEach((tracker) {
+      list.add(tracker.restart(true));
     });
     return Stream.fromFutures(list).toList();
   }
 
   /// Stop all trackers;
-  Future<List<PeerEvent>> stop([bool force = false]) {
+  Future<List<PeerEvent>> stopAll([bool force = false]) {
     var list = <Future<PeerEvent>>[];
-    trackers ??= createTrackers(announces);
-    trackers.forEach((id, tracker) {
+    _trackers.forEach((tracker) {
       list.add(tracker.stop(force));
     });
     return Stream.fromFutures(list).toList();
   }
 
   /// Ask all trackers to complete;
-  Future<List<PeerEvent>> complete() async {
+  Future<List<PeerEvent>> completeAll() async {
     var list = <Future<PeerEvent>>[];
-    trackers ??= createTrackers(announces);
-    trackers.forEach((id, tracker) {
+    _trackers.forEach((tracker) {
       list.add(tracker.complete());
     });
     return Stream.fromFutures(list).toList();
   }
 
+  Tracker findTracker(String id) {
+    return _trackers.singleWhere((element) => (id == element.id));
+  }
+
   Future startTracker(String id) async {
-    var tracker = trackers[id];
-    if (tracker != null) return tracker.start();
+    var tracker = findTracker(id);
+    return tracker?.start();
   }
 
   Future stopTracker(String id, [bool force = false]) {
-    var tracker = trackers[id];
-    if (tracker != null) return tracker.stop(force);
-    return null;
+    var tracker = findTracker(id);
+    return tracker?.stop(force);
   }
 
   Future completeTracker(String id) {
-    var tracker = trackers[id];
-    if (tracker != null) return tracker.complete();
-    return null;
+    var tracker = findTracker(id);
+    return tracker?.complete();
   }
 
-  Tracker removeTracker(String id) {
-    _announceOverTrackers.remove(id);
-    return trackers.remove(id);
+  bool removeTracker(String id) {
+    var tracker = findTracker(id);
+    if (tracker != null) {
+      // _announceOverTrackers.remove(id);
+      tracker.dispose();
+      return _trackers.remove(tracker);
+    }
+    return false;
   }
 
   /// Close stream controller
   void _cleanup() {
-    trackers.clear();
-    _announceOverTrackers.clear();
+    _trackers.clear();
+    // _announceOverTrackers.clear();
     _peerEventHandlers.clear();
     _announceOverHandlers.clear();
     _announceErrorHandlers.clear();
   }
 
-  Map<String, Tracker> createTrackers(List<Uri> announces) {
-    trackers ??= {};
-    trackers.clear();
-    announces.forEach((announce) {
-      if (announce.port > 65535) return;
-      var tracker =
-          trackerGenerator.createTracker(announce, infoHashBuffer, provider);
-      if (tracker != null && trackers[tracker.id] == null) {
-        trackers[tracker.id] = tracker;
-        _hookTrakcer(tracker);
+  Tracker _createTracker(Uri announce) {
+    if (announce.port > 65535 || announce.port < 0) return null;
+    var tracker =
+        trackerGenerator.createTracker(announce, infoHashBuffer, provider);
+    return tracker;
+  }
+
+  ///
+  /// Add a [announce] url
+  ///
+  /// This class will generate a tracker via [announce] , if [start]
+  /// is `true` , this tracker will `start`.
+  bool addAnnounce(Uri announce, [bool start = true]) {
+    var t = _createTracker(announce);
+    if (t != null) {
+      if (_trackers.add(t)) {
+        _hookTrakcer(t);
+        if (start) {
+          t.start(true);
+        }
+        return true;
       }
-    });
-    return trackers;
+    }
+    return false;
+  }
+
+  void addAnnounces(List<Uri> announces, [bool start = true]) {
+    if (announces != null) {
+      announces.forEach((announce) {
+        addAnnounce(announce, start);
+      });
+    }
   }
 
   bool onAnnounceError(void Function(Tracker source, dynamic error) f) {
@@ -223,13 +242,13 @@ class TorrentAnnounceTracker {
     return _trackerDisposedHandlers.remove(f);
   }
 
-  bool onAllAnnounceOver(void Function(int totalTrackers) h) {
-    return _announceAllOverOneTurnHandlers.add(h);
-  }
+  // bool onAllAnnounceOver(void Function(int totalTrackers) h) {
+  //   return _announceAllOverOneTurnHandlers.add(h);
+  // }
 
-  bool offAllAnnounceOver(void Function(int totalTrackers) h) {
-    return _announceAllOverOneTurnHandlers.remove(h);
-  }
+  // bool offAllAnnounceOver(void Function(int totalTrackers) h) {
+  //   return _announceAllOverOneTurnHandlers.remove(h);
+  // }
 
   void _fireAnnounceError(Tracker trakcer, dynamic error) {
     _announceErrorHandlers.forEach((f) {
@@ -242,18 +261,18 @@ class TorrentAnnounceTracker {
       Timer.run(() => f(trakcer, time));
     });
 
-    _announceOverTrackers.add(trakcer.id);
+    // _announceOverTrackers.add(trakcer.id);
 
-    for (var i = 0; i < trackers.keys.length; i++) {
-      var id = trackers.keys.elementAt(i);
-      if (!_announceOverTrackers.contains(id)) {
-        return;
-      }
-    }
-    _announceOverTrackers.clear();
-    _announceAllOverOneTurnHandlers.forEach((h) {
-      Timer.run(() => h(trackers.length));
-    });
+    // for (var i = 0; i < _trackers.length; i++) {
+    //   var tracker = _trackers.elementAt(i);
+    //   if (!_announceOverTrackers.contains(tracker.id)) {
+    //     return;
+    //   }
+    // }
+    // _announceOverTrackers.clear();
+    // _announceAllOverOneTurnHandlers.forEach((h) {
+    //   Timer.run(() => h(_trackers.length));
+    // });
   }
 
   void _firePeerEvent(Tracker trakcer, PeerEvent event) {
@@ -263,16 +282,10 @@ class TorrentAnnounceTracker {
   }
 
   void _fireTrackerDisposed(Tracker trakcer, dynamic reason) {
-    trackers.remove(trakcer.id);
+    _trackers.remove(trakcer);
     _trackerDisposedHandlers.forEach((f) {
       Timer.run(() => f(trakcer, reason));
     });
-  }
-
-  void addPeer(Uri host, Uri peer, String infoHash) {
-    var event = PeerEvent(infoHash, host);
-    event.addPeer(peer);
-    _firePeerEvent(null, event);
   }
 
   void _hookTrakcer(Tracker tracker) {
@@ -285,7 +298,7 @@ class TorrentAnnounceTracker {
   }
 
   Future dispose() async {
-    trackers.values.forEach((element) {
+    _trackers.forEach((element) {
       element.dispose();
     });
     return _cleanup();

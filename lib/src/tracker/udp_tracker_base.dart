@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'dart:typed_data';
 
-import '../utils.dart';
+import 'package:dartorrent_common/dartorrent_common.dart';
 
 /// 第一次连接的时候，connection id是自己设置的，所有文档都提到使用该数字，说它是个magic number
 const START_CONNECTION_ID_NUMER = 0x41727101980;
@@ -30,7 +30,7 @@ mixin UDPTrackerBase {
   RawDatagramSocket _socket;
 
   /// 会话ID。长度为4的一组bytebuffer，随机生成的
-  Uint8List _transcationId;
+  List<int> _transcationId;
 
   /// 连接ID。在第一次发送消息到remote后，remote会返回一个connection id，第二次发送消息
   /// 需要携带该ID
@@ -40,18 +40,18 @@ mixin UDPTrackerBase {
   Uri get uri;
 
   /// 获取当前transcation id，如果有就返回，表示当前通信还未完结。如果没有就重新生成
-  Uint8List get transcationId {
+  List<int> get transcationId {
     _transcationId ??= _generateTranscationId();
     return _transcationId;
   }
 
   /// 将trancation id 转成数字
   int get transcationIdNum {
-    return ByteData.view(transcationId.buffer).getUint32(0);
+    return ByteData.view(Uint8List.fromList(transcationId).buffer).getUint32(0);
   }
 
   /// 生成一个随机4字节的bytebuffer
-  Uint8List _generateTranscationId() {
+  List<int> _generateTranscationId() {
     return randomBytes(4);
   }
 
@@ -60,7 +60,7 @@ mixin UDPTrackerBase {
   /// Announce 和 Scrape通讯的时候，都必须要走这第一步，是固定的。
   ///
   /// 参数completer是一个`Completer`实例。用于截获发生的异常，并通过completeError截获
-  void _connect(Completer completer, Map options) async {
+  Future _connect(Map options) {
     var uri = this.uri;
     if (uri == null) throw ('目标地址Uri不能为空');
     var list = <int>[];
@@ -68,11 +68,7 @@ mixin UDPTrackerBase {
     list.addAll(ACTION_CONNECT);
     list.addAll(transcationId);
     var messageBytes = Uint8List.fromList(list);
-    try {
-      await _sendMessage(messageBytes, uri.host, uri.port);
-    } catch (e) {
-      rethrow;
-    }
+    return _sendMessage(messageBytes, uri.host, uri.port);
   }
 
   /// 和Remote通信的入口函数。返回一个Future
@@ -83,10 +79,10 @@ mixin UDPTrackerBase {
 
     var eventStream = _socket.timeout(TIME_OUT, onTimeout: (e) {
       if (!completer.isCompleted) {
+        close();
         completer.completeError(e);
       }
     });
-
     eventStream.listen((event) async {
       if (event == RawSocketEvent.read) {
         var datagram = _socket.receive();
@@ -99,21 +95,25 @@ mixin UDPTrackerBase {
           var re = await _processAnnounceResponseData(datagram.data, options);
           if (re != null) completer.complete(re);
         } catch (e) {
+          close();
           completer.completeError(e);
         }
       }
     }, onError: (e) {
+      close();
       handleSocketError(e);
+      if (!completer.isCompleted) completer.completeError(e);
     }, onDone: () {
       handleSocketDone();
+      if (!completer.isCompleted) completer.completeError('Socket closed');
     });
 
     // 第一步，连接对方
     try {
-      await _connect(completer, options);
+      await _connect(options);
     } catch (e) {
+      close();
       completer.completeError(e);
-      return completer.future;
     }
     return completer.future;
   }

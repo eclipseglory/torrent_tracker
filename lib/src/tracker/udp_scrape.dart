@@ -1,11 +1,9 @@
 import 'dart:typed_data';
 
+import 'package:dartorrent_common/dartorrent_common.dart';
+
 import 'scrape_event.dart';
-
-import '../utils.dart';
-
 import 'udp_tracker_base.dart';
-
 import 'scrape.dart';
 
 /// Take a look : [UDP Scrape Specification](http://xbtt.sourceforge.net/udp_tracker_protocol.html)
