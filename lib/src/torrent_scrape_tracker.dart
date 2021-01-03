@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-
 import 'scraper_generator.dart';
 import 'tracker/tracker_base.dart';
 
@@ -11,35 +10,29 @@ class TorrentScrapeTracker {
   TorrentScrapeTracker([this.provider]) {
     provider ??= ScraperGenerator.base();
   }
-  final Map<String, Scrape> _scrapers = {};
+  final Map<Uri, Scrape> _scrapers = {};
 
   final Map<String, Set<Scrape>> _file2scrapeMap = {};
 
-  String _getKeyFromUrl(Uri url) {
-    var key = url.toString();
-    if (url.isScheme('udp')) {
-      key = '${url.host}:${url.port}';
+  Scrape addScraper(Uri url, Uint8List infohash) {
+    if (url == null) {
+      return null;
     }
-    if (url.isScheme('http') || url.isScheme('https')) {
-      key = '${url.origin}${url.path}';
+    if (infohash == null || infohash.length != 20) {
+      return null;
     }
-    return key;
-  }
-
-  Scrape addTorrent(Uri announceUrl, Uint8List infoHashBuffer) {
-    var key = _getKeyFromUrl(announceUrl);
-    var scraper = _scrapers[key];
+    var scraper = _scrapers[url];
     if (scraper == null) {
-      scraper = provider.createScrape(announceUrl);
+      scraper = provider.createScrape(url);
       if (scraper == null) return null;
-      _scrapers[key] = scraper;
+      _scrapers[url] = scraper;
     }
-    if (scraper.addInfoHash(infoHashBuffer)) {
-      var infoHash = transformBufferToHexString(infoHashBuffer);
-      var scrapeSet = _file2scrapeMap[infoHash];
+    if (scraper.addInfoHash(infohash)) {
+      var infoHashHex = transformBufferToHexString(infohash);
+      var scrapeSet = _file2scrapeMap[infoHashHex];
       if (scrapeSet == null) {
         scrapeSet = <Scrape>{};
-        _file2scrapeMap[infoHash] = scrapeSet;
+        _file2scrapeMap[infoHashHex] = scrapeSet;
       }
       scrapeSet.add(scraper);
     }
@@ -47,21 +40,21 @@ class TorrentScrapeTracker {
     return scraper;
   }
 
-  List<Scrape> createScrapeFromAnnounces(
-      List<Uri> announces, Uint8List infoHashBuffer) {
-    var list = <Scrape>[];
+  List<Scrape> addScrapes(Iterable<Uri> announces, Uint8List infoHashBuffer) {
+    var l = <Scrape>[];
     announces.forEach((url) {
-      var s = addTorrent(url, infoHashBuffer);
-      if (s != null) list.add(s);
+      var s = addScraper(url, infoHashBuffer);
+      if (s != null) l.add(s);
     });
-    return list;
+    return l;
   }
 
-  Stream scrapeFileByInfohashBuffer(Uint8List infoHashBuffer) {
-    return scrapeFileByInfohash(transformBufferToHexString(infoHashBuffer));
+  Stream scrape(Uint8List infoHashBuffer) {
+    return scrapeByInfoHashHexString(
+        transformBufferToHexString(infoHashBuffer));
   }
 
-  Stream scrapeFileByInfohash(String infoHash) {
+  Stream scrapeByInfoHashHexString(String infoHash) {
     var scrapeSet = _file2scrapeMap[infoHash];
     if (scrapeSet != null && scrapeSet.isNotEmpty) {
       var futures = <Future>[];
@@ -74,18 +67,8 @@ class TorrentScrapeTracker {
   }
 
   Future scrapeByUrl(Uri url) {
-    var key = _getKeyFromUrl(url);
-    var scrape = _scrapers[key];
+    var scrape = _scrapers[url];
     if (scrape != null) return scrape.scrape({});
     return Future.value(false);
-  }
-
-  Stream scrape() {
-    if (_scrapers.isEmpty) return Stream.empty();
-    var futures = <Future>[];
-    _scrapers.values.forEach((scrape) {
-      futures.add(scrape.scrape({}));
-    });
-    return Stream.fromFutures(futures);
   }
 }
