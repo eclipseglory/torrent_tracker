@@ -11,8 +11,7 @@ environment:
 
 dependencies:
   bencode_dart: ^1.0.1
-  dartorrent_common:
-    path : '../../dartorrent_common'
+  dartorrent_common: ^1.0.1
 
 dev_dependencies:
   pedantic: ^1.9.0
