@@ -14,8 +14,8 @@ import 'scrape.dart';
 ///
 /// extends from Scrape class
 class HttpScrape extends Scrape with HttpTrackerBase {
-  HttpScrape(Uri scrapeUrl)
-      : super('${scrapeUrl.origin}${scrapeUrl.path}', scrapeUrl);
+  HttpScrape(Uri scrapeUrl, [int maxRetryTime = 3])
+      : super('${scrapeUrl.origin}${scrapeUrl.path}', scrapeUrl, maxRetryTime);
 
   @override
   Map<String, dynamic> generateQueryParameters(Map<String, dynamic> options) {
@@ -90,4 +90,7 @@ class HttpScrape extends Scrape with HttpTrackerBase {
 
   @override
   Uri get url => scrapeUrl;
+
+  @override
+  int get maxConnectRetryTime => maxRetryTime;
 }

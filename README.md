@@ -1,10 +1,11 @@
 ## About
 
-Dart implementation of a BitTorrent tracker client
+Dart implementation of a BitTorrent Http/Https and UDP tracker/scrape client
 
-## Supper
-- HTTP/HTTPS Tracker/Scrape
-- UDP Tracker/Scrape
+## Support
+- [BEP 0003 HTTP/HTTPS Tracker/Scrape](https://www.bittorrent.org/beps/bep_0003.html)
+- [BEP 0015 UDP Tracker/Scrape](https://www.bittorrent.org/beps/bep_0015.html)
+- [BEP 0007 IPv6 Tracker Extension](https://www.bittorrent.org/beps/bep_0007.html)
 ## How to use it
 
 ### Tracker
@@ -26,8 +27,8 @@ class SimpleProvider implements AnnounceOptionsProvider {
       'downloaded': 0,
       'uploaded': 0,
       'left': torrent.length,
-      'compact': compact,
-      'numwant': numwant,
+      'compact': compact,// it should be 1
+      'numwant': numwant, // max is 50
       'peerId': peerId,
       'port': port
     });
@@ -56,6 +57,7 @@ We can add some listener on the torrentTracker to get the announce result:
       source.dispose();
     });
 ```
+
 
 ### Scrape
 Create a `TorrentScrapeTracker` instance:

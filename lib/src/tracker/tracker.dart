@@ -56,7 +56,12 @@ abstract class Tracker {
 
   AnnounceOptionsProvider provider;
 
-  Tracker(this.id, this.announceUrl, this.infoHashBuffer, {this.provider}) {
+  int maxRetryTime;
+
+  ///
+  /// [maxRetryTime] is the max retry times if connect timeout,default is 3
+  Tracker(this.id, this.announceUrl, this.infoHashBuffer,
+      {this.provider, this.maxRetryTime = 3}) {
     assert(id != null, 'id cant be null');
     assert(announceUrl != null, 'announce url cant be null');
     assert(infoHashBuffer != null && infoHashBuffer.isNotEmpty,

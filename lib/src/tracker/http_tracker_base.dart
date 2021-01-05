@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
+import 'dart:developer' as dev;
 
 import 'dart:typed_data';
 
@@ -56,6 +58,16 @@ mixin HttpTrackerBase {
   /// Return the remote Url
   Uri get url;
 
+  int get maxConnectRetryTime;
+
+  int _connectRetryTimes = 0;
+
+  bool _closed = false;
+
+  bool get isClosed => _closed;
+
+  HttpClientRequest _request;
+
   /// 创建访问URL。
   ///
   /// 其中子类必须实现url属性以及generateQueryParameters方法，才能正确发起访问
@@ -96,16 +108,42 @@ mixin HttpTrackerBase {
   ///
   /// close the http client
   void close() {
+    _closed = true;
+    _request?.abort();
+    _request = null;
     _httpClient?.close(force: true);
     _httpClient = null;
+  }
+
+  void _processTimeout(Map<String, dynamic> options, Completer completer) {
+    _connectRetryTimes++;
+    if (_connectRetryTimes >= maxConnectRetryTime) {
+      close();
+      completer.completeError('too many retry');
+      dev.log('Http重连超过最大次数: $_connectRetryTimes($maxConnectRetryTime). 关闭',
+          name: runtimeType.toString());
+    } else {
+      dev.log('Http连接超时,重连次数： $_connectRetryTimes($maxConnectRetryTime)',
+          name: runtimeType.toString());
+      _request?.abort();
+      _request = null;
+      _httpClient?.close(force: true);
+      _httpClient = null;
+      httpGet(options, completer);
+    }
   }
 
   ///
   /// Http get访问。返回Future，如果访问出现问题，比如响应码不是200，超时，数据接收出问题，URL
   /// 解析错误等，都会被Future的catchError截获。
   ///
-  Future<T> httpGet<T>(Map<String, dynamic> options) async {
-    var completer = Completer<T>();
+  Future<T> httpGet<T>(Map<String, dynamic> options,
+      [Completer completer]) async {
+    if (isClosed) {
+      if (!completer.isCompleted) completer.completeError('Tracker is closed');
+      return completer.future;
+    }
+    completer ??= Completer<T>();
     _httpClient ??= HttpClient();
     var url;
     try {
@@ -117,8 +155,18 @@ mixin HttpTrackerBase {
     }
     try {
       var uri = Uri.parse(url);
-      var request = await _httpClient.getUrl(uri);
-      var response = await request.close();
+      _request = await _httpClient.getUrl(uri).timeout(
+          Duration(seconds: 15 * pow(2, _connectRetryTimes)), onTimeout: () {
+        Timer.run(() => _processTimeout(options, completer));
+        return null;
+      });
+      if (_request == null) return completer.future;
+      var response = await _request.close().timeout(
+          Duration(seconds: 15 * pow(2, _connectRetryTimes)), onTimeout: () {
+        Timer.run(() => _processTimeout(options, completer));
+        return null; //返回null，然后下面会判断
+      });
+      if (response == null) return completer.future;
       if (response.statusCode == 200) {
         var data = <int>[];
         response.listen((bytes) {
@@ -141,8 +189,9 @@ mixin HttpTrackerBase {
         completer.completeError('status code: ${response.statusCode}');
       }
     } catch (e) {
-      close();
-      completer.completeError(e);
+      // 如果出错，尝试一次重连
+      Timer.run(() => _processTimeout(options, completer));
+      return completer.future;
     }
     return completer.future;
   }

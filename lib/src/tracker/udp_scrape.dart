@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dartorrent_common/dartorrent_common.dart';
@@ -39,8 +40,9 @@ class UDPScrape extends Scrape with UDPTrackerBase {
   ///
   /// 该信息是一组由complete,downloaded,incomplete组成的数据。
   @override
-  dynamic processResponseData(Uint8List data, int action) {
-    var event = ScrapeEvent(uri);
+  dynamic processResponseData(
+      Uint8List data, int action, Iterable<CompactAddress> addresses) {
+    var event = ScrapeEvent(scrapeUrl);
     if (action != 2) throw Exception('返回数据中的Action不匹配');
     var view = ByteData.view(data.buffer);
     var i = 0;
@@ -56,15 +58,30 @@ class UDPScrape extends Scrape with UDPTrackerBase {
   }
 
   @override
-  Uri get uri => scrapeUrl;
-
-  @override
   void handleSocketDone() {
-    // TODO: implement handleSocketDone
+    close();
   }
 
   @override
   void handleSocketError(e) {
-    // TODO: implement handleSocketError
+    close();
+  }
+
+  @override
+  Future<List<CompactAddress>> get addresses async {
+    try {
+      var ips = await InternetAddress.lookup(scrapeUrl.host);
+      var l = <CompactAddress>[];
+      ips.forEach((element) {
+        try {
+          l.add(CompactAddress(element, scrapeUrl.port));
+        } catch (e) {
+          //
+        }
+      });
+      return l;
+    } catch (e) {
+      return null;
+    }
   }
 }

@@ -115,24 +115,28 @@ class TorrentAnnounceTracker {
     _announceErrorHandlers.clear();
   }
 
-  Tracker _createTracker(Uri announce, Uint8List infohash) {
+  Tracker _createTracker(Uri announce, Uint8List infohash,
+      [int maxRetryTimes = 3]) {
     if (announce == null) return null;
     if (infohash == null || infohash.length != 20) return null;
     if (announce.port > 65535 || announce.port < 0) return null;
     var tracker = trackerGenerator.createTracker(announce, infohash, provider);
+    tracker.maxRetryTime = maxRetryTimes;
     return tracker;
   }
 
   ///
-  /// Add a [announce] url
+  /// Create and run a tracker via [announce] url
   ///
-  /// This class will generate a tracker via [announce] , if [start]
-  /// is `true` , this tracker will `start`.
+  /// This class will generate a tracker via [announce] , duplicate [announce]
+  /// will be ignore.
   void runTracker(Uri url, Uint8List infoHash,
-      {String event = EVENT_STARTED, bool force = false}) {
+      {String event = EVENT_STARTED,
+      bool force = false,
+      int maxRetryTimes = 3}) {
     var tracker = _trackers[url];
     if (tracker == null) {
-      tracker = _createTracker(url, infoHash);
+      tracker = _createTracker(url, infoHash, maxRetryTimes);
       if (tracker == null) return;
       _hookTrakcer(tracker);
       _trackers[url] = tracker;
@@ -148,15 +152,23 @@ class TorrentAnnounceTracker {
     }
   }
 
+  /// Create and run a tracker via the its url.
+  ///
+  /// [infoHash] is the bytes of the torrent infohash.
   void runTrackers(Iterable<Uri> announces, Uint8List infoHash,
-      {String event = EVENT_STARTED, bool forceStop = false}) {
+      {String event = EVENT_STARTED,
+      bool forceStop = false,
+      int maxRetryTimes = 3}) {
     if (announces != null) {
       announces.forEach((announce) {
-        runTracker(announce, infoHash, event: event, force: forceStop);
+        runTracker(announce, infoHash,
+            event: event, force: forceStop, maxRetryTimes: maxRetryTimes);
       });
     }
   }
 
+  /// Restart all trackers(which is record with this class instance , some of the trackers
+  /// was removed because it can not access)
   bool restartTracker(Uri url) {
     var tracker = _trackers[url];
     tracker?.restart(true);
@@ -214,7 +226,7 @@ class TorrentAnnounceTracker {
   }
 
   void _fireTrackerDisposed(Tracker trakcer, dynamic reason) {
-    _trackers.remove(trakcer);
+    _trackers.remove(trakcer.announceUrl);
     _trackerDisposedHandlers.forEach((f) {
       Timer.run(() => f(trakcer, reason));
     });

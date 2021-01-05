@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:developer';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dartorrent_common/dartorrent_common.dart';
@@ -15,16 +16,33 @@ import 'tracker.dart';
 class UDPTracker extends Tracker with UDPTrackerBase {
   String _currentEvent;
   UDPTracker(Uri _uri, Uint8List infoHashBuffer,
-      {AnnounceOptionsProvider provider})
+      {AnnounceOptionsProvider provider, int maxRetryTime = 3})
       : super('udp:${_uri.host}:${_uri.port}', _uri, infoHashBuffer,
-            provider: provider);
+            provider: provider, maxRetryTime: maxRetryTime) {
+    maxConnectRetryTimes = maxRetryTime;
+  }
 
   String get currentEvent {
     return _currentEvent;
   }
 
   @override
-  Uri get uri => announceUrl;
+  Future<List<CompactAddress>> get addresses async {
+    try {
+      var ips = await InternetAddress.lookup(announceUrl.host);
+      var l = <CompactAddress>[];
+      ips.forEach((element) {
+        try {
+          l.add(CompactAddress(element, announceUrl.port));
+        } catch (e) {
+          //
+        }
+      });
+      return l;
+    } catch (e) {
+      return null;
+    }
+  }
 
   @override
   Future<PeerEvent> announce(String eventType, Map<String, dynamic> options) {
@@ -54,22 +72,32 @@ class UDPTracker extends Tracker with UDPTrackerBase {
   }
 
   @override
-  dynamic processResponseData(Uint8List data, int action) {
+  dynamic processResponseData(
+      Uint8List data, int action, Iterable<CompactAddress> addresses) {
     if (data.length < 20) {
       // 数据不正确
       throw Exception('announce data is wrong');
     }
     var view = ByteData.view(data.buffer);
-    var event = PeerEvent(infoHash, uri,
+    var event = PeerEvent(infoHash, announceUrl,
         interval: view.getUint32(8),
         incomplete: view.getUint32(16),
         complete: view.getUint32(12));
     var ips = data.sublist(20);
+    var add = addresses.elementAt(0);
+    var type = add.address.type;
     try {
-      var list = CompactAddress.parseIPv4Addresses(ips);
-      list?.forEach((c) {
-        event.addPeer(c);
-      });
+      if (type == InternetAddressType.IPv4) {
+        var list = CompactAddress.parseIPv4Addresses(ips);
+        list?.forEach((c) {
+          event.addPeer(c);
+        });
+      } else if (type == InternetAddressType.IPv6) {
+        var list = CompactAddress.parseIPv4Addresses(ips);
+        list?.forEach((c) {
+          event.addPeer(c);
+        });
+      }
     } catch (e) {
       // 容错
       log('解析peer ip 出错 : $ips , ${ips.length}',

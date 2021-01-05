@@ -15,7 +15,9 @@ abstract class Scrape {
   /// Scrape Tracker Id , usually use scrape url
   final String id;
 
-  Scrape(this.id, this.scrapeUrl);
+  int maxRetryTime;
+
+  Scrape(this.id, this.scrapeUrl, [this.maxRetryTime = 3]);
 
   ///
   /// Call this method , client will access the scrape url to get the scrape informations.

@@ -1,7 +1,6 @@
 import 'package:dartorrent_common/dartorrent_common.dart';
 
 import 'tracker_event_base.dart';
-import 'package:dartorrent_common/dartorrent_common.dart';
 
 ///
 /// This class recorded the response from remote when tracker access announce successfully

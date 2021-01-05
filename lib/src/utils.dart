@@ -50,29 +50,4 @@ dynamic getPeerIPv4(ByteData byteView, [int offset = 0]) {
   var d = byteView.getUint8(offset + 3);
   var port = byteView.getUint16(offset + 4, Endian.big);
   return Uri(host: '$a.$b.$c.$d', port: port);
-  // return {'ip': '$a.$b.$c.$d', 'port': port};
-  // switch (bytes.length) {
-  //   case 6:
-  //     return buf[0] +
-  //         "." +
-  //         buf[1] +
-  //         "." +
-  //         buf[2] +
-  //         "." +
-  //         buf[3] +
-  //         ":" +
-  //         buf.readUInt16BE(4);
-  //     break;
-  //   case 18:
-  //     var hexGroups = [];
-  //     for (var i = 0; i < 8; i++) {
-  //       hexGroups.push(buf.readUInt16BE(i * 2).toString(16));
-  //     }
-  //     var host = ipaddr.parse(hexGroups.join(":")).toString();
-  //     return "[" + host + "]:" + buf.readUInt16BE(16);
-  //   default:
-  //     throw new Error(
-  //         "Invalid Compact IP/PORT, It should contain 6 or 18 bytes");
-  // }
 }
-

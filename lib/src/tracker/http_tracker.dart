@@ -9,7 +9,6 @@ import 'package:dartorrent_common/dartorrent_common.dart';
 import 'peer_event.dart';
 import 'http_tracker_base.dart';
 import 'tracker.dart';
-import '../utils.dart' as utils;
 
 /// Torrent http/https tracker implement.
 ///
@@ -20,10 +19,10 @@ class HttpTracker extends Tracker with HttpTrackerBase {
   String _trackerId;
   String _currentEvent;
   HttpTracker(Uri _uri, Uint8List infoHashBuffer,
-      {AnnounceOptionsProvider provider})
+      {AnnounceOptionsProvider provider, int maxRetryTime = 3})
       : super(
             'http:${_uri.host}:${_uri.port}${_uri.path}', _uri, infoHashBuffer,
-            provider: provider);
+            provider: provider, maxRetryTime: maxRetryTime);
 
   String get currentTrackerId {
     return _trackerId;
@@ -156,32 +155,13 @@ class HttpTracker extends Tracker with HttpTrackerBase {
         return;
       }
       if (key == 'peers' && value != null) {
-        if (value is Uint8List) {
-          var peers = CompactAddress.parseIPv4Addresses(value);
-          peers.forEach((peer) => event.addPeer(peer));
-        } else {
-          if (value is List) {
-            value.forEach((peer) {
-              var ip = peer.ip;
-              var port = peer.port;
-              var address = InternetAddress.tryParse(ip);
-              if (address != null) {
-                try {
-                  event.addPeer(CompactAddress(address, port));
-                } catch (e) {
-                  log('parse peer address error',
-                      error: e, name: runtimeType.toString());
-                }
-              }
-            });
-          }
-        }
+        _fillPeers(event, value);
         return;
       }
-
+      // BEP0048
       if (key == 'peers6' && value != null) {
-        print('You IPV6');
-        // TODO process IPv6
+        _fillPeers(event, value, InternetAddressType.IPv6);
+        return;
       }
       // record the values don't process
       event.setInfo(key, value);
@@ -189,6 +169,46 @@ class HttpTracker extends Tracker with HttpTrackerBase {
     return event;
   }
 
+  void _fillPeers(PeerEvent event, dynamic value,
+      [InternetAddressType type = InternetAddressType.IPv4]) {
+    if (value is Uint8List) {
+      if (type == InternetAddressType.IPv6) {
+        try {
+          var peers = CompactAddress.parseIPv6Addresses(value);
+          peers.forEach((peer) => event.addPeer(peer));
+        } catch (e) {
+          //
+        }
+      } else if (type == InternetAddressType.IPv4) {
+        try {
+          var peers = CompactAddress.parseIPv4Addresses(value);
+          peers.forEach((peer) => event.addPeer(peer));
+        } catch (e) {
+          //
+        }
+      }
+    } else {
+      if (value is List) {
+        value.forEach((peer) {
+          var ip = peer['ip'];
+          var port = peer['port'];
+          var address = InternetAddress.tryParse(ip);
+          if (address != null) {
+            try {
+              event.addPeer(CompactAddress(address, port));
+            } catch (e) {
+              log('parse peer address error',
+                  error: e, name: runtimeType.toString());
+            }
+          }
+        });
+      }
+    }
+  }
+
   @override
   Uri get url => announceUrl;
+
+  @override
+  int get maxConnectRetryTime => maxRetryTime;
 }
