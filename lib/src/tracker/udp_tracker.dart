@@ -107,6 +107,20 @@ class UDPTracker extends Tracker with UDPTrackerBase {
   }
 
   @override
+  Future<PeerEvent> stop([bool force = false]) {
+    var f = super.stop(force);
+    close();
+    return f;
+  }
+
+  @override
+  Future<PeerEvent> complete() {
+    var f = super.complete();
+    close();
+    return f;
+  }
+
+  @override
   Future dispose([dynamic reason]) {
     close();
     return super.dispose(reason);

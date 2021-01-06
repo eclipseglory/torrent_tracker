@@ -121,7 +121,6 @@ class TorrentAnnounceTracker {
     if (infohash == null || infohash.length != 20) return null;
     if (announce.port > 65535 || announce.port < 0) return null;
     var tracker = trackerGenerator.createTracker(announce, infohash, provider);
-    tracker.maxRetryTime = maxRetryTimes;
     return tracker;
   }
 
@@ -138,9 +137,11 @@ class TorrentAnnounceTracker {
     if (tracker == null) {
       tracker = _createTracker(url, infoHash, maxRetryTimes);
       if (tracker == null) return;
+      tracker.maxRetryTime = maxRetryTimes;
       _hookTrakcer(tracker);
       _trackers[url] = tracker;
     }
+    if (tracker.isDisposed) return;
     if (event == EVENT_STARTED) {
       tracker.start(true);
     }

@@ -119,8 +119,10 @@ abstract class Tracker {
     PeerEvent result;
     try {
       result = await announce(event, await _announceOptions);
-      result.eventType = event;
-      _firePeerEvent(result);
+      if (result != null) {
+        result.eventType = event;
+        _firePeerEvent(result);
+      }
     } catch (e) {
       if (errorOrCancel) {
         timer?.cancel();
@@ -216,11 +218,10 @@ abstract class Tracker {
     }
     try {
       var re = await announce(EVENT_STOPPED, await _announceOptions);
-      re.eventType = EVENT_STOPPED;
+      re?.eventType = EVENT_STOPPED;
       _fireStopEvent(re);
       return re;
     } catch (e) {
-      await dispose(e);
       return null;
     }
   }

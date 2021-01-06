@@ -15,3 +15,6 @@
 - Make tracker and scrape can re-try
 - Change Readme and example
 - Delete useless files
+
+## 1.3.6
+- Fix a http tracker bug

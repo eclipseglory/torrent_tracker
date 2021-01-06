@@ -176,6 +176,14 @@ mixin HttpTrackerBase {
           try {
             var result = processResponseData(Uint8List.fromList(data));
             completer.complete(result);
+            {
+              // 得到数据后关闭client
+              // NOTE: 不关闭的话会有一些服务器莫名其妙发送response过来，导致一个无法catch的exception
+              _request?.abort();
+              _request = null;
+              _httpClient?.close(force: true);
+              _httpClient = null;
+            }
           } catch (e) {
             close();
             completer.completeError(e);

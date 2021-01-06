@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
-import 'dart:io';
 import 'package:dartorrent_common/dartorrent_common.dart';
 
 import 'package:torrent_tracker/src/torrent_announce_tracker.dart';
@@ -9,32 +8,7 @@ import 'package:torrent_tracker/torrent_tracker.dart';
 import 'package:torrent_model/torrent_model.dart';
 
 void main() async {
-  // https://newtrackon.com/api/stable
-  // Get more announces from `newtrackon` website
-  var alist = <Uri>[];
-  try {
-    var url = Uri.parse('http://newtrackon.com/api/stable');
-    var client = HttpClient();
-    var request = await client.getUrl(url);
-    var response = await request.close();
-    var stream = await utf8.decoder.bind(response);
-    await stream.forEach((element) {
-      var ss = element.split('\n');
-      ss.forEach((url) {
-        if (url.isNotEmpty) {
-          try {
-            var r = Uri.parse(url);
-            alist.add(r);
-          } catch (e) {
-            //
-          }
-        }
-      });
-    });
-  } catch (e) {
-    print(e);
-  }
-  var torrent = await Torrent.parse('example/test.torrent');
+  var torrent = await Torrent.parse('example/test9.torrent');
   var id = generatePeerId();
   var port = 55551;
   var provider = SimpleProvider(torrent, id, port);
@@ -51,6 +25,7 @@ void main() async {
     });
     torrentTracker.onPeerEvent((source, event) {
       // print('${source.announceUrl} peer event: $event');
+      if (event == null) return;
       peerAddress.addAll(event.peers);
       print('got ${peerAddress.length} peers');
     });
@@ -59,11 +34,12 @@ void main() async {
       print('${source.announceUrl} announce over!: $time');
       source.dispose();
     });
+    findPublicTrackers().listen((urls) {
+      torrentTracker.runTrackers(urls, torrent.infoHashBuffer);
+    });
 
-    torrentTracker.runTrackers(torrent.announces, torrent.infoHashBuffer);
-    torrentTracker.runTrackers(alist, torrent.infoHashBuffer);
-    Timer(Duration(seconds: 30), () async {
-      await torrentTracker.dispose();
+    Timer(Duration(seconds: 10), () async {
+      await torrentTracker.stop(true);
       print(peerAddress);
     });
   } catch (e) {
@@ -71,11 +47,11 @@ void main() async {
   }
 
   /// Scrape
-  var scrapeTracker = TorrentScrapeTracker();
-  scrapeTracker.addScrapes(torrent.announces, torrent.infoHashBuffer);
-  scrapeTracker.scrape(torrent.infoHashBuffer).listen((event) {
-    print(event);
-  }, onError: (e) => log('error:', error: e, name: 'MAIN'));
+  // var scrapeTracker = TorrentScrapeTracker();
+  // scrapeTracker.addScrapes(torrent.announces, torrent.infoHashBuffer);
+  // scrapeTracker.scrape(torrent.infoHashBuffer).listen((event) {
+  //   print(event);
+  // }, onError: (e) => log('error:', error: e, name: 'MAIN'));
 }
 
 class SimpleProvider implements AnnounceOptionsProvider {

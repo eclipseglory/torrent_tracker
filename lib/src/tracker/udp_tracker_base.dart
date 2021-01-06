@@ -235,8 +235,12 @@ mixin UDPTrackerBase {
         return;
       }
       // announce获得返回结果
-      var result = processResponseData(data, action, address);
-      completer.complete(result);
+      try {
+        var result = processResponseData(data, action, address);
+        completer.complete(result);
+      } catch (e) {
+        completer.completeError('Response Announce Result Data error');
+      }
       close();
     } else {
       if (!completer.isCompleted) {
