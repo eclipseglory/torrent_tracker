@@ -19,10 +19,10 @@ class HttpTracker extends Tracker with HttpTrackerBase {
   String _trackerId;
   String _currentEvent;
   HttpTracker(Uri _uri, Uint8List infoHashBuffer,
-      {AnnounceOptionsProvider provider, int maxRetryTime = 3})
+      {AnnounceOptionsProvider provider})
       : super(
             'http:${_uri.host}:${_uri.port}${_uri.path}', _uri, infoHashBuffer,
-            provider: provider, maxRetryTime: maxRetryTime);
+            provider: provider);
 
   String get currentTrackerId {
     return _trackerId;
@@ -33,22 +33,22 @@ class HttpTracker extends Tracker with HttpTrackerBase {
   }
 
   @override
-  Future<PeerEvent> stop([bool force = false]) {
+  Future<PeerEvent> stop([bool force = false]) async {
+    await close();
     var f = super.stop(force);
-    close();
     return f;
   }
 
   @override
-  Future<PeerEvent> complete() {
+  Future<PeerEvent> complete() async {
+    await close();
     var f = super.complete();
-    close();
     return f;
   }
 
   @override
   Future dispose([dynamic reason]) async {
-    close();
+    await close();
     return super.dispose(reason);
   }
 
@@ -208,7 +208,4 @@ class HttpTracker extends Tracker with HttpTrackerBase {
 
   @override
   Uri get url => announceUrl;
-
-  @override
-  int get maxConnectRetryTime => maxRetryTime;
 }

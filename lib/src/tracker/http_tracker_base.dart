@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
-import 'dart:developer' as dev;
 
 import 'dart:typed_data';
 
@@ -35,6 +33,8 @@ import 'dart:typed_data';
 mixin HttpTrackerBase {
   HttpClient _httpClient;
 
+  HttpClientRequest _request;
+
   /// Return a map with query params.
   /// [options] is a map , it help to generate paramter
   ///
@@ -58,15 +58,9 @@ mixin HttpTrackerBase {
   /// Return the remote Url
   Uri get url;
 
-  int get maxConnectRetryTime;
-
-  int _connectRetryTimes = 0;
-
   bool _closed = false;
 
   bool get isClosed => _closed;
-
-  HttpClientRequest _request;
 
   /// 创建访问URL。
   ///
@@ -107,101 +101,58 @@ mixin HttpTrackerBase {
 
   ///
   /// close the http client
-  void close() {
+  Future close() async {
     _closed = true;
-    _request?.abort();
-    _request = null;
-    _httpClient?.close(force: true);
-    _httpClient = null;
+    await _clear();
   }
 
-  void _processTimeout(Map<String, dynamic> options, Completer completer) {
-    _connectRetryTimes++;
-    if (_connectRetryTimes >= maxConnectRetryTime) {
-      close();
-      completer.completeError('too many retry');
-      dev.log('Http重连超过最大次数: $_connectRetryTimes($maxConnectRetryTime). 关闭',
-          name: runtimeType.toString());
-    } else {
-      dev.log('Http连接超时,重连次数： $_connectRetryTimes($maxConnectRetryTime)',
-          name: runtimeType.toString());
-      _request?.abort();
-      _request = null;
-      _httpClient?.close(force: true);
-      _httpClient = null;
-      httpGet(options, completer);
-    }
+  void _clear() async {
+    _httpClient?.close(force: true);
+    _httpClient = null;
+    _request?.abort();
+    _request = null;
+    await _sc?.cancel();
+    _sc = null;
+  }
+
+  StreamSubscription _sc;
+  Future _receiveResponseData(HttpClientResponse response) async {
+    var c = Completer();
+    var d = <int>[];
+    _sc = response.listen((event) {
+      d.addAll(event);
+    }, onDone: () {
+      if (!c.isCompleted) c.complete(d);
+    }, onError: (e) {
+      if (!c.isCompleted) c.completeError(e);
+    });
+    return c.future;
   }
 
   ///
   /// Http get访问。返回Future，如果访问出现问题，比如响应码不是200，超时，数据接收出问题，URL
   /// 解析错误等，都会被Future的catchError截获。
   ///
-  Future<T> httpGet<T>(Map<String, dynamic> options,
-      [Completer completer]) async {
+  Future<T> httpGet<T>(Map<String, dynamic> options) async {
     if (isClosed) {
-      if (!completer.isCompleted) completer.completeError('Tracker is closed');
-      return completer.future;
+      return null;
     }
-    completer ??= Completer<T>();
-    _httpClient ??= HttpClient();
-    var url;
     try {
+      var url;
       url = _createAccessURL(options);
-    } catch (e) {
-      close();
-      completer.completeError(e);
-      return completer.future;
-    }
-    try {
       var uri = Uri.parse(url);
-      _request = await _httpClient.getUrl(uri).timeout(
-          Duration(seconds: 15 * pow(2, _connectRetryTimes)), onTimeout: () {
-        Timer.run(() => _processTimeout(options, completer));
-        return null;
-      });
-      if (_request == null) return completer.future;
-      var response = await _request.close().timeout(
-          Duration(seconds: 15 * pow(2, _connectRetryTimes)), onTimeout: () {
-        Timer.run(() => _processTimeout(options, completer));
-        return null; //返回null，然后下面会判断
-      });
-      if (response == null) return completer.future;
-      if (response.statusCode == 200) {
-        var data = <int>[];
-        response.listen((bytes) {
-          data.addAll(bytes);
-        }, onDone: () {
-          if (completer.isCompleted) return;
-          try {
-            var result = processResponseData(Uint8List.fromList(data));
-            completer.complete(result);
-            {
-              // 得到数据后关闭client
-              // NOTE: 不关闭的话会有一些服务器莫名其妙发送response过来，导致一个无法catch的exception
-              _request?.abort();
-              _request = null;
-              _httpClient?.close(force: true);
-              _httpClient = null;
-            }
-          } catch (e) {
-            close();
-            completer.completeError(e);
-          }
-        }, onError: (e) {
-          close();
-          completer.completeError(e); // 截获获取响应时候的错误
-        });
-      } else {
-        close();
-        completer.completeError('status code: ${response.statusCode}');
-      }
+      _httpClient?.close();
+      _httpClient = HttpClient();
+      _request?.abort();
+      _request = await _httpClient.getUrl(uri);
+      var response = await _request.close();
+      var datas = await _receiveResponseData(response);
+      await _clear();
+      return processResponseData(Uint8List.fromList(datas));
     } catch (e) {
-      // 如果出错，尝试一次重连
-      Timer.run(() => _processTimeout(options, completer));
-      return completer.future;
+      await _clear();
+      rethrow;
     }
-    return completer.future;
   }
 
   /// Process the remote response byte buffer and return the useful informations they need.

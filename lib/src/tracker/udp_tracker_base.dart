@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
-import 'dart:developer' as dev;
 
 import 'dart:typed_data';
 
@@ -63,17 +61,7 @@ mixin UDPTrackerBase {
     return randomBytes(4);
   }
 
-  Timer _connectTimer;
-
-  int _connectRetryTimes = 0;
-
   int maxConnectRetryTimes = 3;
-
-  Timer _announceTimer;
-
-  int _announceRetryTimes = 0;
-
-  final int _maxAnnounceRetryTimes = 2;
 
   /// 与Remote通讯的第一次连接
   ///
@@ -81,7 +69,7 @@ mixin UDPTrackerBase {
   ///
   /// 参数completer是一个`Completer`实例。用于截获发生的异常，并通过completeError截获
   void _connect(
-      Map options, List<CompactAddress> address, Completer completer) {
+      Map options, List<CompactAddress> address, Completer completer) async {
     if (isClosed) {
       if (!completer.isCompleted) completer.completeError('Tracker closed');
       return;
@@ -93,27 +81,10 @@ mixin UDPTrackerBase {
     var messageBytes = Uint8List.fromList(list);
     try {
       _sendMessage(messageBytes, address);
-      // 开始计时，超时重连
-      _connectTimer?.cancel();
-      _connectTimer =
-          Timer(Duration(seconds: 15 * pow(2, _connectRetryTimes)), () {
-        _connectRetryTimes++;
-        if (_connectRetryTimes >= maxConnectRetryTimes) {
-          if (!completer.isCompleted) {
-            completer.completeError('Retry too many times');
-          }
-          dev.log(
-              'connect 超时，超过最大限制:$_connectRetryTimes($maxConnectRetryTimes)，关闭',
-              name: runtimeType.toString());
-          close();
-        } else {
-          Timer.run(() => _connect(options, address, completer));
-        }
-      });
       return;
     } catch (e) {
       if (!completer.isCompleted) completer.completeError(e);
-      close();
+      await close();
     }
   }
 
@@ -123,7 +94,7 @@ mixin UDPTrackerBase {
     var completer = Completer<T>();
     var adds = await addresses;
     if (adds == null || adds.isEmpty) {
-      close();
+      await close();
       if (!completer.isCompleted) {
         completer.completeError('InternetAddress cant be null');
       }
@@ -131,18 +102,18 @@ mixin UDPTrackerBase {
     }
     _socket?.close();
     _socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
-    _socket.listen((event) {
+    _socket.listen((event) async {
       if (event == RawSocketEvent.read) {
         var datagram = _socket.receive();
         if (datagram == null || datagram.data.length < 8) {
-          close();
+          await close();
           completer.completeError('Wrong datas');
           return;
         }
         _processAnnounceResponseData(datagram.data, options, adds, completer);
       }
-    }, onError: (e) {
-      close();
+    }, onError: (e) async {
+      await close();
       handleSocketError(e);
       if (!completer.isCompleted) completer.completeError(e);
     }, onDone: () {
@@ -186,7 +157,7 @@ mixin UDPTrackerBase {
   /// 该方法并不会直接去处理Remote返回的最终消息，而且固定了整个通信流程。
   /// 该方法会去处理在第一次发送信息后收到消息，然后到接收到第二次消息的整个过程
   void _processAnnounceResponseData(Uint8List data, Map options,
-      List<CompactAddress> address, Completer completer) {
+      List<CompactAddress> address, Completer completer) async {
     if (isClosed) {
       if (!completer.isCompleted) completer.completeError('Tracker Closed');
       return;
@@ -198,26 +169,7 @@ mixin UDPTrackerBase {
       // 表明连接成功，可以进行announce
       if (action == 0) {
         _connectionId = data.sublist(8, 16); // 返回信息的第8-16位是下次连接的connection id
-        _connectTimer?.cancel();
-        _connectTimer = null;
-        _announce(_connectionId, options, address); // 继续，不要停
-        _announceTimer?.cancel();
-        _announceTimer =
-            Timer(Duration(seconds: 15 * pow(2, _announceRetryTimes)), () {
-          _announceRetryTimes++;
-          if (_announceRetryTimes >= _maxAnnounceRetryTimes) {
-            dev.log(
-                'announce 超时，超过最大限制 : $_announceRetryTimes($_maxAnnounceRetryTimes)，重新连接',
-                name: runtimeType.toString());
-            _announceRetryTimes = 0;
-            _announceTimer?.cancel();
-            _announceTimer = null;
-            Timer.run(() => _connect(options, address, completer));
-          } else {
-            Timer.run(() => _processAnnounceResponseData(
-                data, options, address, completer));
-          }
-        });
+        await _announce(_connectionId, options, address); // 继续，不要停
         return;
       }
       // 发生错误
@@ -231,7 +183,7 @@ mixin UDPTrackerBase {
         if (!completer.isCompleted) {
           completer.completeError(errorMsg);
         }
-        close();
+        await close();
         return;
       }
       // announce获得返回结果
@@ -241,33 +193,33 @@ mixin UDPTrackerBase {
       } catch (e) {
         completer.completeError('Response Announce Result Data error');
       }
-      close();
+      await close();
     } else {
       if (!completer.isCompleted) {
         completer.completeError('Transacation ID incorrect');
       }
-      close();
+      await close();
     }
   }
 
   /// 关闭连接以及清楚设置
-  void close() {
+  Future close() {
     _closed = true;
     _socket?.close();
     _socket = null;
-    _connectTimer?.cancel();
-    _connectTimer = null;
-    _announceTimer?.cancel();
-    _announceTimer = null;
-    _connectRetryTimes = 0;
-    _announceRetryTimes = 0;
+    return null;
   }
 
   /// 发送数据包到指定的ip地址
   void _sendMessage(Uint8List message, List<CompactAddress> addresses) {
     if (isClosed) return;
+    var success = false;
     addresses.forEach((element) {
-      _socket?.send(message, element.address, element.port);
+      var bytes = _socket?.send(message, element.address, element.port);
+      if (bytes != 0) success = true;
     });
+    if (!success) {
+      Timer.run(() => _sendMessage(message, addresses));
+    }
   }
 }

@@ -30,23 +30,30 @@ abstract class Tracker {
   final Uri announceUrl;
 
   /// 循环访问announce url的间隔时间，单位秒，默认值30分钟
-  int _announceInterval = 30 * 60; // 30 minites
+  final int DEFAULT_INTERVAL_TIME = 30 * 60; // 30 minites
 
   /// 循环scrape数据的间隔时间，单位秒，默认1分钟
   int announceScrape = 1 * 60;
 
-  final Set<void Function(PeerEvent)> _peerEventHandlers = {};
+  final Set<void Function(Tracker source, PeerEvent event)> _peerEventHandlers =
+      {};
 
-  final Set<void Function(PeerEvent)> _stopEventHandlers = {};
+  final Set<void Function(Tracker source, PeerEvent event)> _stopEventHandlers =
+      {};
 
-  final Set<void Function(PeerEvent)> _completeEventHandlers = {};
+  final Set<void Function(Tracker source, PeerEvent event)>
+      _completeEventHandlers = {};
 
-  final Set<void Function(Tracker tracker, dynamic reason)>
+  final Set<void Function(Tracker source, dynamic reason)>
       _disposeEventHandlers = {};
 
-  final Set<void Function(dynamic error)> _announceErrorHandlers = {};
+  final Set<void Function(Tracker source, dynamic error)>
+      _announceErrorHandlers = {};
 
-  final Set<void Function(int intervalTime)> _announceOverHandlers = {};
+  final Set<void Function(Tracker source, int intervalTime)>
+      _announceOverHandlers = {};
+
+  final Set<void Function(Tracker source)> _announceStartHandlers = {};
 
   Timer _announceTimer;
 
@@ -56,12 +63,9 @@ abstract class Tracker {
 
   AnnounceOptionsProvider provider;
 
-  int maxRetryTime;
-
   ///
   /// [maxRetryTime] is the max retry times if connect timeout,default is 3
-  Tracker(this.id, this.announceUrl, this.infoHashBuffer,
-      {this.provider, this.maxRetryTime = 3}) {
+  Tracker(this.id, this.announceUrl, this.infoHashBuffer, {this.provider}) {
     assert(id != null, 'id cant be null');
     assert(announceUrl != null, 'announce url cant be null');
     assert(infoHashBuffer != null && infoHashBuffer.isNotEmpty,
@@ -85,21 +89,21 @@ abstract class Tracker {
   ///
   /// 开始循环发起announce访问。
   ///
-  Future<bool> start([bool errorOrCancel = true]) async {
+  Future<bool> start() async {
     if (isDisposed) throw Exception('This tracker was disposed');
     if (isRunning) return true;
     _running = true;
-    return _intervalAnnounce(null, EVENT_STARTED, errorOrCancel);
+    return _intervalAnnounce(EVENT_STARTED);
   }
 
   ///
   /// 重新开始循环发起announce访问。
   ///
-  Future<bool> restart([bool errorOrCancel = true]) async {
+  Future<bool> restart() async {
     if (isDisposed) throw Exception('This tracker was disposed');
     stopIntervalAnnounce();
     _running = false;
-    return start(errorOrCancel);
+    return start();
   }
 
   ///
@@ -108,14 +112,12 @@ abstract class Tracker {
   /// 这里会比较返回值和现有值，如果不同会停止当前的Timer并重新生成一个新的循环间隔Timer
   ///
   /// 如果announce抛出异常，该循环不会停止,除非[errorOrCancel]设置位 `true`
-  Future<bool> _intervalAnnounce(Timer timer, String event,
-      [bool errorOrCancel = true]) async {
+  Future<bool> _intervalAnnounce(String event) async {
     if (isDisposed) {
-      timer?.cancel();
-      timer = null;
       _running = false;
       return false;
     }
+    _fireAnnounceStartEvent();
     PeerEvent result;
     try {
       result = await announce(event, await _announceOptions);
@@ -124,16 +126,8 @@ abstract class Tracker {
         _firePeerEvent(result);
       }
     } catch (e) {
-      if (errorOrCancel) {
-        timer?.cancel();
-        timer = null;
-        _running = false;
-        _fireAnnounceOver(-1);
-        await dispose(e);
-        return false;
-      } else {
-        _fireAnnounceError(e);
-      }
+      _fireAnnounceError(e);
+      return false;
     }
     var interval;
     if (result != null && result is PeerEvent) {
@@ -149,19 +143,12 @@ abstract class Tracker {
         }
       }
     }
-    // debug:
-    // if(announceUrl.host == 'tracker.gbitt.info'){
-    //   print('here');
-    // }
-    interval ??= _announceInterval;
-    if (timer == null || interval != _announceInterval) {
-      timer?.cancel();
-      _announceInterval = interval;
-      // _announceInterval = 10; //test
-      _announceTimer = Timer.periodic(Duration(seconds: _announceInterval),
-          (timer) => _intervalAnnounce(timer, event));
-    }
-    _fireAnnounceOver(_announceInterval);
+
+    interval ??= DEFAULT_INTERVAL_TIME;
+    _announceTimer?.cancel();
+    _announceTimer =
+        Timer(Duration(seconds: interval), () => _intervalAnnounce(event));
+    _fireAnnounceOver(interval);
     return true;
   }
 
@@ -169,8 +156,16 @@ abstract class Tracker {
     if (_disposed) return;
     _disposed = true;
     _running = false;
+    _announceTimer?.cancel();
     _fireDisposed(reason);
-    _clean();
+    _peerEventHandlers.clear();
+    _announceErrorHandlers.clear();
+    _announceOverHandlers.clear();
+    _stopEventHandlers.clear();
+    _completeEventHandlers.clear();
+    _announceStartHandlers.clear();
+    _disposeEventHandlers.clear();
+    await close();
   }
 
   Future<Map<String, dynamic>> get _announceOptions async {
@@ -188,14 +183,7 @@ abstract class Tracker {
     return options;
   }
 
-  void _clean() {
-    stopIntervalAnnounce();
-    _peerEventHandlers.clear();
-    _announceErrorHandlers.clear();
-    _announceOverHandlers.clear();
-    _stopEventHandlers.clear();
-    _completeEventHandlers.clear();
-  }
+  Future close();
 
   void stopIntervalAnnounce() {
     _announceTimer?.cancel();
@@ -214,12 +202,14 @@ abstract class Tracker {
     stopIntervalAnnounce();
     if (force) {
       _fireStopEvent(null);
+      await close();
       return null;
     }
     try {
       var re = await announce(EVENT_STOPPED, await _announceOptions);
       re?.eventType = EVENT_STOPPED;
       _fireStopEvent(re);
+      await close();
       return re;
     } catch (e) {
       return null;
@@ -237,6 +227,7 @@ abstract class Tracker {
       var re = await announce(EVENT_COMPLETED, await _announceOptions);
       re.eventType = EVENT_COMPLETED;
       _fireCompleteEvent(re);
+      await close();
       return re;
     } catch (e) {
       await dispose(e);
@@ -255,43 +246,52 @@ abstract class Tracker {
   /// 不同，那么Tracker就会停止当前的Timer并重新创建一个Timer，间隔时间设置为返回对象中的interval值
   Future<PeerEvent> announce(String eventType, Map<String, dynamic> options);
 
-  bool onAnnounceError(void Function(dynamic error) handler) {
+  bool onAnnounceError(void Function(Tracker source, dynamic error) handler) {
     return _announceErrorHandlers?.add(handler);
   }
 
-  bool offAnnounceError(void Function(dynamic error) handler) {
+  bool offAnnounceError(void Function(Tracker source, dynamic error) handler) {
     return _announceErrorHandlers?.remove(handler);
   }
 
-  bool onPeerEvent(void Function(PeerEvent) handler) {
+  bool onPeerEvent(void Function(Tracker source, PeerEvent event) handler) {
     return _peerEventHandlers?.add(handler);
   }
 
-  bool offPeerEvent(void Function(PeerEvent) handler) {
+  bool offPeerEvent(void Function(Tracker source, PeerEvent) handler) {
     return _peerEventHandlers?.remove(handler);
   }
 
-  bool onStopEvent(void Function(PeerEvent) handler) {
+  bool onStopEvent(void Function(Tracker source, PeerEvent) handler) {
     return _stopEventHandlers?.add(handler);
   }
 
-  bool offStopEvent(void Function(PeerEvent) handler) {
+  bool offStopEvent(void Function(Tracker source, PeerEvent) handler) {
     return _stopEventHandlers?.remove(handler);
   }
 
-  bool onCompleteEvent(void Function(PeerEvent) handler) {
+  bool onCompleteEvent(void Function(Tracker source, PeerEvent) handler) {
     return _completeEventHandlers?.add(handler);
   }
 
-  bool offCompleteEvent(void Function(PeerEvent) handler) {
+  bool offCompleteEvent(void Function(Tracker source, PeerEvent) handler) {
     return _completeEventHandlers?.remove(handler);
   }
 
-  bool onAnnounceOver(void Function(int intervalTime) handler) {
+  bool onAnnounceStart(void Function(Tracker source) handler) {
+    return _announceStartHandlers?.add(handler);
+  }
+
+  bool offAnnounceStart(void Function(Tracker source) handler) {
+    return _announceStartHandlers?.remove(handler);
+  }
+
+  bool onAnnounceOver(void Function(Tracker source, int intervalTime) handler) {
     return _announceOverHandlers?.add(handler);
   }
 
-  bool offAnnounceOver(void Function(int intervalTime) handler) {
+  bool offAnnounceOver(
+      void Function(Tracker source, int intervalTime) handler) {
     return _announceOverHandlers?.remove(handler);
   }
 
@@ -299,37 +299,43 @@ abstract class Tracker {
     return _disposeEventHandlers?.add(handler);
   }
 
-  bool offDisposed(void Function(Tracker) handler) {
+  bool offDisposed(void Function(Tracker, dynamic) handler) {
     return _disposeEventHandlers?.remove(handler);
+  }
+
+  void _fireAnnounceStartEvent() {
+    _announceStartHandlers?.forEach((handler) {
+      Timer.run(() => handler(this));
+    });
   }
 
   void _firePeerEvent(PeerEvent event) {
     _peerEventHandlers?.forEach((handler) {
-      Timer.run(() => handler(event));
+      Timer.run(() => handler(this, event));
     });
   }
 
   void _fireStopEvent(PeerEvent event) {
     _stopEventHandlers?.forEach((handler) {
-      Timer.run(() => handler(event));
+      Timer.run(() => handler(this, event));
     });
   }
 
   void _fireCompleteEvent(PeerEvent event) {
     _completeEventHandlers?.forEach((handler) {
-      Timer.run(() => handler(event));
+      Timer.run(() => handler(this, event));
     });
   }
 
   void _fireAnnounceError(dynamic error) {
     _announceErrorHandlers?.forEach((handler) {
-      Timer.run(() => handler(error));
+      Timer.run(() => handler(this, error));
     });
   }
 
   void _fireAnnounceOver(int intervalTime) {
     _announceOverHandlers?.forEach((handler) {
-      Timer.run(() => handler(intervalTime));
+      Timer.run(() => handler(this, intervalTime));
     });
   }
 

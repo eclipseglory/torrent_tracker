@@ -16,12 +16,9 @@ import 'tracker.dart';
 class UDPTracker extends Tracker with UDPTrackerBase {
   String _currentEvent;
   UDPTracker(Uri _uri, Uint8List infoHashBuffer,
-      {AnnounceOptionsProvider provider, int maxRetryTime = 3})
+      {AnnounceOptionsProvider provider})
       : super('udp:${_uri.host}:${_uri.port}', _uri, infoHashBuffer,
-            provider: provider, maxRetryTime: maxRetryTime) {
-    maxConnectRetryTimes = maxRetryTime;
-  }
-
+            provider: provider);
   String get currentEvent {
     return _currentEvent;
   }
@@ -107,28 +104,22 @@ class UDPTracker extends Tracker with UDPTrackerBase {
   }
 
   @override
-  Future<PeerEvent> stop([bool force = false]) {
+  Future<PeerEvent> stop([bool force = false]) async {
+    await close();
     var f = super.stop(force);
-    close();
     return f;
   }
 
   @override
-  Future<PeerEvent> complete() {
+  Future<PeerEvent> complete() async {
+    await close();
     var f = super.complete();
-    close();
     return f;
-  }
-
-  @override
-  Future dispose([dynamic reason]) {
-    close();
-    return super.dispose(reason);
   }
 
   @override
   void handleSocketDone() {
-    dispose('远程/本地 关闭了连接');
+    dispose('Remote/Local close the socket');
   }
 
   @override

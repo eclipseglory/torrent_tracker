@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:torrent_tracker/src/tracker/peer_event.dart';
@@ -33,6 +34,14 @@ class TorrentAnnounceTracker {
 
   final Set<void Function(Tracker tracker, dynamic reason)>
       _trackerDisposedHandlers = {};
+
+  final Set<void Function(Tracker tracker)> _announceStartHandlers = {};
+
+  final Map<Tracker, List<dynamic>> _announceRetryTimers = {};
+
+  final int maxRetryTime;
+
+  final int _retryAfter = 5;
 
   // final Set<String> _announceOverTrackers = {};
 
@@ -88,15 +97,18 @@ class TorrentAnnounceTracker {
   ///   }
   /// }
   /// ```
-  TorrentAnnounceTracker(this.provider, {this.trackerGenerator}) {
+  TorrentAnnounceTracker(this.provider,
+      {this.trackerGenerator, this.maxRetryTime = 3}) {
     trackerGenerator ??= TrackerGenerator.base();
     assert(provider != null, 'provider cant be null');
   }
 
+  int get trackersNum => _trackers.length;
+
   Future<List<bool>> restartAll() {
     var list = <Future<bool>>[];
     _trackers.forEach((url, tracker) {
-      list.add(tracker.restart(true));
+      list.add(tracker.restart());
     });
     return Stream.fromFutures(list).toList();
   }
@@ -109,14 +121,19 @@ class TorrentAnnounceTracker {
   /// Close stream controller
   void _cleanup() {
     _trackers.clear();
-    // _announceOverTrackers.clear();
     _peerEventHandlers.clear();
     _announceOverHandlers.clear();
     _announceErrorHandlers.clear();
+    _announceStartHandlers.clear();
+    _announceRetryTimers.forEach((key, record) {
+      if (record != null) {
+        record[0].cancel();
+      }
+    });
+    _announceRetryTimers.clear();
   }
 
-  Tracker _createTracker(Uri announce, Uint8List infohash,
-      [int maxRetryTimes = 3]) {
+  Tracker _createTracker(Uri announce, Uint8List infohash) {
     if (announce == null) return null;
     if (infohash == null || infohash.length != 20) return null;
     if (announce.port > 65535 || announce.port < 0) return null;
@@ -130,20 +147,18 @@ class TorrentAnnounceTracker {
   /// This class will generate a tracker via [announce] , duplicate [announce]
   /// will be ignore.
   void runTracker(Uri url, Uint8List infoHash,
-      {String event = EVENT_STARTED,
-      bool force = false,
-      int maxRetryTimes = 3}) {
+      {String event = EVENT_STARTED, bool force = false}) {
+    if (isDisposed) return;
     var tracker = _trackers[url];
     if (tracker == null) {
-      tracker = _createTracker(url, infoHash, maxRetryTimes);
+      tracker = _createTracker(url, infoHash);
       if (tracker == null) return;
-      tracker.maxRetryTime = maxRetryTimes;
       _hookTrakcer(tracker);
       _trackers[url] = tracker;
     }
     if (tracker.isDisposed) return;
     if (event == EVENT_STARTED) {
-      tracker.start(true);
+      tracker.start();
     }
     if (event == EVENT_STOPPED) {
       tracker.stop(force);
@@ -160,10 +175,10 @@ class TorrentAnnounceTracker {
       {String event = EVENT_STARTED,
       bool forceStop = false,
       int maxRetryTimes = 3}) {
+    if (isDisposed) return;
     if (announces != null) {
       announces.forEach((announce) {
-        runTracker(announce, infoHash,
-            event: event, force: forceStop, maxRetryTimes: maxRetryTimes);
+        runTracker(announce, infoHash, event: event, force: forceStop);
       });
     }
   }
@@ -172,7 +187,7 @@ class TorrentAnnounceTracker {
   /// was removed because it can not access)
   bool restartTracker(Uri url) {
     var tracker = _trackers[url];
-    tracker?.restart(true);
+    tracker?.restart();
     return tracker != null;
   }
 
@@ -208,41 +223,103 @@ class TorrentAnnounceTracker {
     return _trackerDisposedHandlers.remove(f);
   }
 
-  void _fireAnnounceError(Tracker trakcer, dynamic error) {
+  bool onAnnounceStart(void Function(Tracker source) f) {
+    return _announceStartHandlers.add(f);
+  }
+
+  bool offAnnounceStart(void Function(Tracker source) f) {
+    return _announceStartHandlers.remove(f);
+  }
+
+  void _fireAnnounceError(Tracker tracker, dynamic error) {
+    if (isDisposed) return;
+    var record = _announceRetryTimers.remove(tracker);
+    if (tracker.isDisposed) return;
+    var times = 0;
+    if (record != null) {
+      record[0].cancel();
+      times = record[1];
+    }
+    if (times >= maxRetryTime) {
+      tracker.dispose('NO MORE RETRY ($times/$maxRetryTime)');
+      return;
+    }
+    var re_time = _retryAfter * pow(2, times);
+    var timer = Timer(Duration(seconds: re_time), () {
+      if (tracker.isDisposed || isDisposed) return;
+      _unHookTracker(tracker);
+      var url = tracker.announceUrl;
+      var infoHash = tracker.infoHashBuffer;
+      _trackers.remove(url);
+      tracker.dispose();
+      runTracker(url, infoHash);
+    });
+    times++;
+    _announceRetryTimers[tracker] = [timer, times];
     _announceErrorHandlers.forEach((f) {
-      Timer.run(() => f(trakcer, error));
+      Timer.run(() => f(tracker, error));
     });
   }
 
-  void _fireAnnounceOver(Tracker trakcer, int time) {
+  void _fireAnnounceOver(Tracker tracker, int time) {
+    var record = _announceRetryTimers.remove(tracker);
+    if (record != null) {
+      record[0].cancel();
+    }
     _announceOverHandlers.forEach((f) {
-      Timer.run(() => f(trakcer, time));
+      Timer.run(() => f(tracker, time));
     });
   }
 
-  void _firePeerEvent(Tracker trakcer, PeerEvent event) {
+  void _firePeerEvent(Tracker tracker, PeerEvent event) {
+    var record = _announceRetryTimers.remove(tracker);
+    if (record != null) {
+      record[0].cancel();
+    }
     _peerEventHandlers.forEach((f) {
-      Timer.run(() => f(trakcer, event));
+      Timer.run(() => f(tracker, event));
     });
   }
 
-  void _fireTrackerDisposed(Tracker trakcer, dynamic reason) {
-    _trackers.remove(trakcer.announceUrl);
+  void _fireTrackerDisposed(Tracker tracker, dynamic reason) {
+    var record = _announceRetryTimers.remove(tracker);
+    if (record != null) {
+      record[0].cancel();
+    }
+    _trackers.remove(tracker.announceUrl);
     _trackerDisposedHandlers.forEach((f) {
-      Timer.run(() => f(trakcer, reason));
+      Timer.run(() => f(tracker, reason));
+    });
+  }
+
+  void _fireAnnounceStart(Tracker tracker) {
+    _announceStartHandlers.forEach((f) {
+      Timer.run(() => f(tracker));
     });
   }
 
   void _hookTrakcer(Tracker tracker) {
-    tracker.onAnnounceError((error) => _fireAnnounceError(tracker, error));
-    tracker.onAnnounceOver((time) => _fireAnnounceOver(tracker, time));
-    tracker.onPeerEvent((event) => _firePeerEvent(tracker, event));
+    tracker.onAnnounceStart(_fireAnnounceStart);
+    tracker.onAnnounceError(_fireAnnounceError);
+    tracker.onAnnounceOver(_fireAnnounceOver);
+    tracker.onPeerEvent(_firePeerEvent);
     tracker.onDisposed(_fireTrackerDisposed);
-    tracker.onCompleteEvent((event) => _firePeerEvent(tracker, event));
-    tracker.onStopEvent((event) => _firePeerEvent(tracker, event));
+    tracker.onCompleteEvent(_firePeerEvent);
+    tracker.onStopEvent(_firePeerEvent);
+  }
+
+  void _unHookTracker(Tracker tracker) {
+    tracker.offAnnounceStart(_fireAnnounceStart);
+    tracker.offAnnounceError(_fireAnnounceError);
+    tracker.offAnnounceOver(_fireAnnounceOver);
+    tracker.offPeerEvent(_firePeerEvent);
+    tracker.offDisposed(_fireTrackerDisposed);
+    tracker.offCompleteEvent(_firePeerEvent);
+    tracker.offStopEvent(_firePeerEvent);
   }
 
   Future<List> stop([bool force = false]) {
+    if (isDisposed) return null;
     var l = <Future>[];
     _trackers.forEach((url, element) {
       l.add(element.stop(force));
@@ -250,10 +327,19 @@ class TorrentAnnounceTracker {
     return Stream.fromFutures(l).toList();
   }
 
+  bool _disposed = false;
+
+  bool get isDisposed => _disposed;
+
   Future dispose() async {
+    if (isDisposed) return;
+    _disposed = true;
+    var f = <Future>[];
     _trackers.forEach((url, element) {
-      element.dispose();
+      _unHookTracker(element);
+      f.add(element.dispose());
     });
-    return _cleanup();
+    _cleanup();
+    return Stream.fromFutures(f).toList();
   }
 }

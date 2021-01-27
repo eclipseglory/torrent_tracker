@@ -18,3 +18,8 @@
 
 ## 1.3.6
 - Fix a http tracker bug
+
+## 1.3.11
+- Remove 'timeout' retry future.
+- Add 'Error happen' retry future.
+- Change HttpTracker

@@ -84,13 +84,10 @@ class HttpScrape extends Scrape with HttpTrackerBase {
     } catch (e) {
       log('Scrape Error : $url', error: e, name: runtimeType.toString());
     } finally {
-      close();
+      await close();
     }
   }
 
   @override
   Uri get url => scrapeUrl;
-
-  @override
-  int get maxConnectRetryTime => maxRetryTime;
 }

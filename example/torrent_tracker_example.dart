@@ -16,32 +16,36 @@ void main() async {
 
   /// Announce Track:
   try {
-    var torrentTracker = TorrentAnnounceTracker(provider);
+    var torrentTracker = TorrentAnnounceTracker(provider, maxRetryTime: 0);
     torrentTracker.onTrackerDispose((source, reason) {
-      // if (reason != null) log('Tracker disposed :', error: reason);
+      // if (reason != null && source is HttpTracker)
+      log('Tracker disposed  , remain ${torrentTracker.trackersNum} :',
+          error: reason);
     });
     torrentTracker.onAnnounceError((source, error) {
-      log('announce error:', error: error);
+      // log('announce error:', error: error);
+      // source.dispose(error);
     });
     torrentTracker.onPeerEvent((source, event) {
       // print('${source.announceUrl} peer event: $event');
       if (event == null) return;
       peerAddress.addAll(event.peers);
+      source.dispose('Complete Announc');
       print('got ${peerAddress.length} peers');
     });
 
     torrentTracker.onAnnounceOver((source, time) {
-      print('${source.announceUrl} announce over!: $time');
-      source.dispose();
+      print('${source.announceUrl} announce over: $time');
+      // source.dispose();
     });
     findPublicTrackers().listen((urls) {
       torrentTracker.runTrackers(urls, torrent.infoHashBuffer);
     });
 
-    Timer(Duration(seconds: 10), () async {
-      await torrentTracker.stop(true);
-      print(peerAddress);
-    });
+    // Timer(Duration(seconds: 120), () async {
+    //   await torrentTracker.stop(true);
+    //   print('completed $peerAddress');
+    // });
   } catch (e) {
     print(e);
   }
