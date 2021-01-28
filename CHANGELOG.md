@@ -23,3 +23,6 @@
 - Remove 'timeout' retry future.
 - Add 'Error happen' retry future.
 - Change HttpTracker
+
+## 1.3.12
+- Add 'complete' method

@@ -327,6 +327,15 @@ class TorrentAnnounceTracker {
     return Stream.fromFutures(l).toList();
   }
 
+  Future<List> complete() {
+    if (isDisposed) return null;
+    var l = <Future>[];
+    _trackers.forEach((url, element) {
+      l.add(element.complete());
+    });
+    return Stream.fromFutures(l).toList();
+  }
+
   bool _disposed = false;
 
   bool get isDisposed => _disposed;

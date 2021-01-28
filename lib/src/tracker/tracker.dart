@@ -198,7 +198,7 @@ abstract class Tracker {
   /// [force] 是强制关闭标识，默认值为`false`。 如果为`true`，刚方法不会去调用`announce`方法
   /// 发送`stopped`请求，而是直接返回一个`null`
   Future<PeerEvent> stop([bool force = false]) async {
-    if (isDisposed) throw Exception('This tracker was disposed');
+    if (isDisposed) return null;
     stopIntervalAnnounce();
     if (force) {
       _fireStopEvent(null);
@@ -221,7 +221,7 @@ abstract class Tracker {
   ///
   /// 该方法会调用一次announce，参数位completed。
   Future<PeerEvent> complete() async {
-    if (isDisposed) throw Exception('This tracker was disposed');
+    if (isDisposed) return null;
     stopIntervalAnnounce();
     try {
       var re = await announce(EVENT_COMPLETED, await _announceOptions);
