@@ -11,7 +11,7 @@ typedef AnnounceErrorHandler = void Function(Tracker t, dynamic error);
 
 typedef AnnounceOverHandler = void Function(Tracker t, int time);
 
-typedef PeerEventHandler = void Function(Tracker t, PeerEvent event);
+typedef PeerEventHandler = void Function(Tracker t, PeerEvent? event);
 
 /// Torrent announce tracker.
 ///
@@ -22,7 +22,7 @@ typedef PeerEventHandler = void Function(Tracker t, PeerEvent event);
 class TorrentAnnounceTracker {
   final Map<Uri, Tracker> _trackers = {};
 
-  TrackerGenerator trackerGenerator;
+  TrackerGenerator? trackerGenerator;
 
   AnnounceOptionsProvider provider;
 
@@ -100,7 +100,6 @@ class TorrentAnnounceTracker {
   TorrentAnnounceTracker(this.provider,
       {this.trackerGenerator, this.maxRetryTime = 3}) {
     trackerGenerator ??= TrackerGenerator.base();
-    assert(provider != null, 'provider cant be null');
   }
 
   int get trackersNum => _trackers.length;
@@ -133,11 +132,11 @@ class TorrentAnnounceTracker {
     _announceRetryTimers.clear();
   }
 
-  Tracker _createTracker(Uri announce, Uint8List infohash) {
-    if (announce == null) return null;
-    if (infohash == null || infohash.length != 20) return null;
+  Tracker? _createTracker(Uri announce, Uint8List infohash) {
+    if (trackerGenerator == null) return null;
+    if (infohash.length != 20) return null;
     if (announce.port > 65535 || announce.port < 0) return null;
-    var tracker = trackerGenerator.createTracker(announce, infohash, provider);
+    var tracker = trackerGenerator!.createTracker(announce, infohash, provider);
     return tracker;
   }
 
@@ -176,11 +175,10 @@ class TorrentAnnounceTracker {
       bool forceStop = false,
       int maxRetryTimes = 3}) {
     if (isDisposed) return;
-    if (announces != null) {
-      announces.forEach((announce) {
-        runTracker(announce, infoHash, event: event, force: forceStop);
-      });
-    }
+
+    announces.forEach((announce) {
+      runTracker(announce, infoHash, event: event, force: forceStop);
+    });
   }
 
   /// Restart all trackers(which is record with this class instance , some of the trackers
@@ -207,7 +205,7 @@ class TorrentAnnounceTracker {
     return _announceOverHandlers.remove(f);
   }
 
-  bool onPeerEvent(void Function(Tracker source, PeerEvent event) f) {
+  bool onPeerEvent(void Function(Tracker source, PeerEvent? event) f) {
     return _peerEventHandlers.add(f);
   }
 
@@ -237,14 +235,14 @@ class TorrentAnnounceTracker {
     if (tracker.isDisposed) return;
     var times = 0;
     if (record != null) {
-      record[0].cancel();
+      (record[0] as Timer).cancel();
       times = record[1];
     }
     if (times >= maxRetryTime) {
       tracker.dispose('NO MORE RETRY ($times/$maxRetryTime)');
       return;
     }
-    var re_time = _retryAfter * pow(2, times);
+    var re_time = (_retryAfter * pow(2, times) as int);
     var timer = Timer(Duration(seconds: re_time), () {
       if (tracker.isDisposed || isDisposed) return;
       _unHookTracker(tracker);
@@ -271,7 +269,7 @@ class TorrentAnnounceTracker {
     });
   }
 
-  void _firePeerEvent(Tracker tracker, PeerEvent event) {
+  void _firePeerEvent(Tracker tracker, PeerEvent? event) {
     var record = _announceRetryTimers.remove(tracker);
     if (record != null) {
       record[0].cancel();
@@ -318,18 +316,18 @@ class TorrentAnnounceTracker {
     tracker.offStopEvent(_firePeerEvent);
   }
 
-  Future<List> stop([bool force = false]) {
+  Future<List<PeerEvent?>>? stop([bool force = false]) {
     if (isDisposed) return null;
-    var l = <Future>[];
+    var l = <Future<PeerEvent?>>[];
     _trackers.forEach((url, element) {
       l.add(element.stop(force));
     });
     return Stream.fromFutures(l).toList();
   }
 
-  Future<List> complete() {
+  Future<List<PeerEvent?>>? complete() {
     if (isDisposed) return null;
-    var l = <Future>[];
+    var l = <Future<PeerEvent?>>[];
     _trackers.forEach((url, element) {
       l.add(element.complete());
     });

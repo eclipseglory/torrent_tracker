@@ -31,9 +31,10 @@ import 'dart:typed_data';
 ///
 ///
 mixin HttpTrackerBase {
-  HttpClient _httpClient;
+  HttpClient? _httpClient;
 
-  HttpClientRequest _request;
+  HttpClientRequest? _request;
+  StreamSubscription? _sc;
 
   /// Return a map with query params.
   /// [options] is a map , it help to generate paramter
@@ -53,7 +54,7 @@ mixin HttpTrackerBase {
   ///   return map;
   /// ```
   /// Then access url with the query string will be : `http://remoteurl?name=Sam&name=Bob`
-  Map<String, dynamic> generateQueryParameters(Map<String, dynamic> options);
+  Map<String, dynamic>? generateQueryParameters(Map<String, dynamic> options);
 
   /// Return the remote Url
   Uri get url;
@@ -66,17 +67,11 @@ mixin HttpTrackerBase {
   ///
   /// 其中子类必须实现url属性以及generateQueryParameters方法，才能正确发起访问
   String _createAccessURL(Map<String, dynamic> options) {
-    var url = this.url;
-    if (url == null) {
-      throw Exception('URL can not be empty');
-    }
-
     var parameters = generateQueryParameters(options);
     if (parameters == null || parameters.isEmpty) {
       throw Exception('Query params can not be empty');
     }
-
-    var _queryStr = parameters.keys.fold('', (previousValue, key) {
+    var _queryStr = parameters.keys.fold<String>('', (previousValue, key) {
       var values = parameters[key];
       if (values is String) {
         previousValue += '&$key=$values';
@@ -86,6 +81,7 @@ mixin HttpTrackerBase {
         values.forEach((value) => previousValue += '&$key=$value');
         return previousValue;
       }
+      return previousValue;
     });
     // if (_queryStr.isNotEmpty) _queryStr = _queryStr.substring(1); scrape
     var str = _rawUrl;
@@ -106,7 +102,7 @@ mixin HttpTrackerBase {
     await _clear();
   }
 
-  void _clear() async {
+  Future<void> _clear() async {
     _httpClient?.close(force: true);
     _httpClient = null;
     _request?.abort();
@@ -115,11 +111,10 @@ mixin HttpTrackerBase {
     _sc = null;
   }
 
-  StreamSubscription _sc;
-  Future _receiveResponseData(HttpClientResponse response) async {
-    var c = Completer();
+  Future<List<int>> _receiveResponseData(HttpClientResponse? response) async {
+    var c = Completer<List<int>>();
     var d = <int>[];
-    _sc = response.listen((event) {
+    _sc = response?.listen((event) {
       d.addAll(event);
     }, onDone: () {
       if (!c.isCompleted) c.complete(d);
@@ -133,19 +128,19 @@ mixin HttpTrackerBase {
   /// Http get访问。返回Future，如果访问出现问题，比如响应码不是200，超时，数据接收出问题，URL
   /// 解析错误等，都会被Future的catchError截获。
   ///
-  Future<T> httpGet<T>(Map<String, dynamic> options) async {
+  Future<T?> httpGet<T>(Map<String, dynamic> options) async {
     if (isClosed) {
       return null;
     }
     try {
-      var url;
-      url = _createAccessURL(options);
+      var url = _createAccessURL(options);
       var uri = Uri.parse(url);
       _httpClient?.close();
       _httpClient = HttpClient();
       _request?.abort();
-      _request = await _httpClient.getUrl(uri);
-      var response = await _request.close();
+      _request = await _httpClient?.getUrl(uri);
+      var response = await _request?.close();
+
       var datas = await _receiveResponseData(response);
       await _clear();
       return processResponseData(Uint8List.fromList(datas));

@@ -6,7 +6,7 @@ import 'package:dartorrent_common/dartorrent_common.dart';
 
 /// Torrent scrape tracker
 class TorrentScrapeTracker {
-  ScraperGenerator provider;
+  ScraperGenerator? provider;
   TorrentScrapeTracker([this.provider]) {
     provider ??= ScraperGenerator.base();
   }
@@ -14,16 +14,13 @@ class TorrentScrapeTracker {
 
   final Map<String, Set<Scrape>> _file2scrapeMap = {};
 
-  Scrape addScraper(Uri url, Uint8List infohash) {
-    if (url == null) {
-      return null;
-    }
-    if (infohash == null || infohash.length != 20) {
+  Scrape? addScraper(Uri url, Uint8List infohash) {
+    if (infohash.length != 20) {
       return null;
     }
     var scraper = _scrapers[url];
     if (scraper == null) {
-      scraper = provider.createScrape(url);
+      scraper = provider?.createScrape(url);
       if (scraper == null) return null;
       _scrapers[url] = scraper;
     }

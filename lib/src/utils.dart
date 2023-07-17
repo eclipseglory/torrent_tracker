@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-String transformToScrapeUrl(String url) {
+String? transformToScrapeUrl(String url) {
   var lastIndex = url.lastIndexOf('/');
   if (lastIndex == -1) {
     lastIndex = url.lastIndexOf('\\');

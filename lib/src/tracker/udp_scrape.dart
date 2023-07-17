@@ -26,7 +26,7 @@ class UDPScrape extends Scrape with UDPTrackerBase {
     var list = <int>[];
     list.addAll(connectionId);
     list.addAll(ACTION_SCRAPE); // Action的类型，目前是scrapt,即2
-    list.addAll(transcationId); // 会话ID
+    list.addAll(transcationId!); // 会话ID
     var infos = infoHashSet;
     if (infos.isEmpty) throw Exception('infohash 不能位空');
     infos.forEach((info) {
@@ -58,8 +58,8 @@ class UDPScrape extends Scrape with UDPTrackerBase {
   }
 
   @override
-  void handleSocketDone() {
-    close();
+  void handleSocketDone() async {
+    await close();
   }
 
   @override
@@ -68,7 +68,7 @@ class UDPScrape extends Scrape with UDPTrackerBase {
   }
 
   @override
-  Future<List<CompactAddress>> get addresses async {
+  Future<List<CompactAddress>?> get addresses async {
     try {
       var ips = await InternetAddress.lookup(scrapeUrl.host);
       var l = <CompactAddress>[];

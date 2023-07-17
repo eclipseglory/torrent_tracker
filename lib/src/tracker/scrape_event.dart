@@ -41,19 +41,19 @@ class ScrapeEvent extends TrackerEventBase {
 /// For single file scrape result
 class ScrapeResult extends TrackerEventBase {
   /// number of peers with the entire file, i.e. seeders
-  int complete;
+  int? complete;
 
   /// number of non-seeder peers, aka "leechers"
-  int incomplete;
+  int? incomplete;
 
   /// total number of times the tracker has registered a completion
-  int downloaded;
+  int? downloaded;
 
   /// Torrent info hash string
   final String infoHash;
 
   /// the torrent's internal name, as specified by the "name" file in the info section of the .torrent file
-  String name;
+  String? name;
 
   ScrapeResult(this.infoHash,
       {this.complete, this.incomplete, this.downloaded, this.name});

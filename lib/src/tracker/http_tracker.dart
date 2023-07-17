@@ -16,31 +16,31 @@ import 'tracker.dart';
 /// [HTTP/HTTPS Tracker Protocol](https://wiki.theory.org/index.php/BitTorrentSpecification#Tracker_HTTP.2FHTTPS_Protocol).
 ///
 class HttpTracker extends Tracker with HttpTrackerBase {
-  String _trackerId;
-  String _currentEvent;
+  String? _trackerId;
+  String? _currentEvent;
   HttpTracker(Uri _uri, Uint8List infoHashBuffer,
-      {AnnounceOptionsProvider provider})
+      {AnnounceOptionsProvider? provider})
       : super(
             'http:${_uri.host}:${_uri.port}${_uri.path}', _uri, infoHashBuffer,
             provider: provider);
 
-  String get currentTrackerId {
+  String? get currentTrackerId {
     return _trackerId;
   }
 
-  String get currentEvent {
+  String? get currentEvent {
     return _currentEvent;
   }
 
   @override
-  Future<PeerEvent> stop([bool force = false]) async {
+  Future<PeerEvent?> stop([bool force = false]) async {
     await close();
     var f = super.stop(force);
     return f;
   }
 
   @override
-  Future<PeerEvent> complete() async {
+  Future<PeerEvent?> complete() async {
     await close();
     var f = super.complete();
     return f;
@@ -53,7 +53,7 @@ class HttpTracker extends Tracker with HttpTrackerBase {
   }
 
   @override
-  Future<PeerEvent> announce(String event, Map<String, dynamic> options) {
+  Future<PeerEvent?> announce(String event, Map<String, dynamic> options) {
     _currentEvent = event; // 修改当前event，stop和complete也会调用该方法，所以要在这里进行记录当前event类型
     return httpGet<PeerEvent>(options);
   }
@@ -99,7 +99,7 @@ class HttpTracker extends Tracker with HttpTrackerBase {
     } else {
       params['event'] = EVENT_STARTED;
     }
-    if (currentTrackerId != null) params['trackerid'] = currentTrackerId;
+    if (currentTrackerId != null) params['trackerid'] = currentTrackerId!;
     // params['no_peer_id']
     // params['ip'] ; 可选
     // params['key'] ; 可选

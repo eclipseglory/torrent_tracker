@@ -14,17 +14,17 @@ import 'tracker.dart';
 
 /// UDP Tracker
 class UDPTracker extends Tracker with UDPTrackerBase {
-  String _currentEvent;
+  String? _currentEvent;
   UDPTracker(Uri _uri, Uint8List infoHashBuffer,
-      {AnnounceOptionsProvider provider})
+      {AnnounceOptionsProvider? provider})
       : super('udp:${_uri.host}:${_uri.port}', _uri, infoHashBuffer,
             provider: provider);
-  String get currentEvent {
+  String? get currentEvent {
     return _currentEvent;
   }
 
   @override
-  Future<List<CompactAddress>> get addresses async {
+  Future<List<CompactAddress>?> get addresses async {
     try {
       var ips = await InternetAddress.lookup(announceUrl.host);
       var l = <CompactAddress>[];
@@ -42,7 +42,7 @@ class UDPTracker extends Tracker with UDPTrackerBase {
   }
 
   @override
-  Future<PeerEvent> announce(String eventType, Map<String, dynamic> options) {
+  Future<PeerEvent?> announce(String eventType, Map<String, dynamic> options) {
     _currentEvent = eventType;
     return contactAnnouncer<PeerEvent>(options);
   }
@@ -52,7 +52,7 @@ class UDPTracker extends Tracker with UDPTrackerBase {
     var list = <int>[];
     list.addAll(connectionId);
     list.addAll(ACTION_ANNOUNCE); // Action的类型，目前是announce,即1
-    list.addAll(transcationId); // 会话ID
+    list.addAll(transcationId!); // 会话ID
     list.addAll(infoHashBuffer);
     list.addAll(utf8.encode(options['peerId']));
     list.addAll(num2Uint64List(options['downloaded']));
@@ -86,12 +86,12 @@ class UDPTracker extends Tracker with UDPTrackerBase {
     try {
       if (type == InternetAddressType.IPv4) {
         var list = CompactAddress.parseIPv4Addresses(ips);
-        list?.forEach((c) {
+        list.forEach((c) {
           event.addPeer(c);
         });
       } else if (type == InternetAddressType.IPv6) {
         var list = CompactAddress.parseIPv4Addresses(ips);
-        list?.forEach((c) {
+        list.forEach((c) {
           event.addPeer(c);
         });
       }
@@ -104,14 +104,14 @@ class UDPTracker extends Tracker with UDPTrackerBase {
   }
 
   @override
-  Future<PeerEvent> stop([bool force = false]) async {
+  Future<PeerEvent?> stop([bool force = false]) async {
     await close();
     var f = super.stop(force);
     return f;
   }
 
   @override
-  Future<PeerEvent> complete() async {
+  Future<PeerEvent?> complete() async {
     await close();
     var f = super.complete();
     return f;

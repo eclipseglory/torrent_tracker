@@ -7,7 +7,6 @@ class TrackerException implements Exception {
 
   @override
   String toString() {
-    if (id == null) return 'Unknown track error';
     if (failureReason == null) {
       return 'TrackerException($id) - Unknown track error';
     }

@@ -27,33 +27,34 @@ mixin UDPTrackerBase {
   /// UDP 套接字。
   ///
   /// 基本上一次连接-响应过后就会被关闭。第二次连接再创建新的
-  RawDatagramSocket _socket;
+  RawDatagramSocket? _socket;
 
   /// 会话ID。长度为4的一组bytebuffer，随机生成的
-  List<int> _transcationId;
+  List<int>? _transcationId;
 
   /// 连接ID。在第一次发送消息到remote后，remote会返回一个connection id，第二次发送消息
   /// 需要携带该ID
-  Uint8List _connectionId;
+  Uint8List? _connectionId;
 
   /// 远程URL
   // Uri get uri;
 
-  Future<List<CompactAddress>> get addresses;
+  Future<List<CompactAddress>?> get addresses;
 
   bool _closed = false;
 
   bool get isClosed => _closed;
 
   /// 获取当前transcation id，如果有就返回，表示当前通信还未完结。如果没有就重新生成
-  List<int> get transcationId {
+  List<int>? get transcationId {
     _transcationId ??= _generateTranscationId();
     return _transcationId;
   }
 
   /// 将trancation id 转成数字
   int get transcationIdNum {
-    return ByteData.view(Uint8List.fromList(transcationId).buffer).getUint32(0);
+    return ByteData.view(Uint8List.fromList(transcationId!).buffer)
+        .getUint32(0);
   }
 
   /// 生成一个随机4字节的bytebuffer
@@ -77,24 +78,24 @@ mixin UDPTrackerBase {
     var list = <int>[];
     list.addAll(START_CONNECTION_ID); //这是个magic id
     list.addAll(ACTION_CONNECT);
-    list.addAll(transcationId);
+    list.addAll(transcationId!);
     var messageBytes = Uint8List.fromList(list);
     try {
       _sendMessage(messageBytes, address);
       return;
     } catch (e) {
       if (!completer.isCompleted) completer.completeError(e);
-      await close();
+      close();
     }
   }
 
   /// 和Remote通信的入口函数。返回一个Future
-  Future<T> contactAnnouncer<T>(Map options) async {
+  Future<T?> contactAnnouncer<T>(Map options) async {
     if (isClosed) return null;
     var completer = Completer<T>();
     var adds = await addresses;
     if (adds == null || adds.isEmpty) {
-      await close();
+      close();
       if (!completer.isCompleted) {
         completer.completeError('InternetAddress cant be null');
       }
@@ -102,18 +103,18 @@ mixin UDPTrackerBase {
     }
     _socket?.close();
     _socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
-    _socket.listen((event) async {
+    _socket?.listen((event) async {
       if (event == RawSocketEvent.read) {
-        var datagram = _socket.receive();
+        var datagram = _socket?.receive();
         if (datagram == null || datagram.data.length < 8) {
-          await close();
+          close();
           completer.completeError('Wrong datas');
           return;
         }
         _processAnnounceResponseData(datagram.data, options, adds, completer);
       }
     }, onError: (e) async {
-      await close();
+      close();
       handleSocketError(e);
       if (!completer.isCompleted) completer.completeError(e);
     }, onDone: () {
@@ -142,10 +143,10 @@ mixin UDPTrackerBase {
 
   ///
   /// 第一次连接成功后，发送第二次信息
-  void _announce(Uint8List connectionId, Map options,
+  Future<void> _announce(Uint8List connectionId, Map options,
       List<CompactAddress> addresses) async {
     var message = generateSecondTouchMessage(connectionId, options);
-    if (message == null || message.isEmpty) {
+    if (message.isEmpty) {
       throw '发送数据不能为空';
     } else {
       _sendMessage(message, addresses);
@@ -169,7 +170,7 @@ mixin UDPTrackerBase {
       // 表明连接成功，可以进行announce
       if (action == 0) {
         _connectionId = data.sublist(8, 16); // 返回信息的第8-16位是下次连接的connection id
-        await _announce(_connectionId, options, address); // 继续，不要停
+        await _announce(_connectionId!, options, address); // 继续，不要停
         return;
       }
       // 发生错误
@@ -183,7 +184,7 @@ mixin UDPTrackerBase {
         if (!completer.isCompleted) {
           completer.completeError(errorMsg);
         }
-        await close();
+        close();
         return;
       }
       // announce获得返回结果
@@ -193,7 +194,7 @@ mixin UDPTrackerBase {
       } catch (e) {
         completer.completeError('Response Announce Result Data error');
       }
-      await close();
+      close();
     } else {
       if (!completer.isCompleted) {
         completer.completeError('Transacation ID incorrect');
@@ -203,11 +204,11 @@ mixin UDPTrackerBase {
   }
 
   /// 关闭连接以及清楚设置
-  Future close() {
+  Future<void> close() {
     _closed = true;
     _socket?.close();
     _socket = null;
-    return null;
+    return Future.wait([]);
   }
 
   /// 发送数据包到指定的ip地址

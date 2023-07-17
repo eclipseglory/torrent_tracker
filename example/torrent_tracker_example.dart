@@ -3,16 +3,17 @@ import 'dart:convert';
 import 'dart:developer';
 import 'package:dartorrent_common/dartorrent_common.dart';
 
-import 'package:torrent_tracker/src/torrent_announce_tracker.dart';
 import 'package:torrent_tracker/torrent_tracker.dart';
 import 'package:torrent_model/torrent_model.dart';
 
 void main() async {
-  var torrent = await Torrent.parse('example/test9.torrent');
+  var torrent = await Torrent.parse('example/test.torrent');
+
   var id = generatePeerId();
   var port = 55551;
-  var provider = SimpleProvider(torrent, id, port);
+  var provider = SimpleProvider(torrent, id, port, torrent.infoHash);
   var peerAddress = <CompactAddress>{};
+  print(provider.torrent);
 
   /// Announce Track:
   try {
@@ -59,7 +60,7 @@ void main() async {
 }
 
 class SimpleProvider implements AnnounceOptionsProvider {
-  SimpleProvider(this.torrent, this.peerId, this.port);
+  SimpleProvider(this.torrent, this.peerId, this.port, this.infoHash);
   String peerId;
   int port;
   String infoHash;

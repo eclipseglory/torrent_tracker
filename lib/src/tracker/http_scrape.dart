@@ -18,7 +18,7 @@ class HttpScrape extends Scrape with HttpTrackerBase {
       : super('${scrapeUrl.origin}${scrapeUrl.path}', scrapeUrl, maxRetryTime);
 
   @override
-  Map<String, dynamic> generateQueryParameters(Map<String, dynamic> options) {
+  Map<String, dynamic>? generateQueryParameters(Map<String, dynamic> options) {
     if (infoHashSet.isEmpty) return null;
     var infos = [];
     // infohash value usually can not be decode by utf8, because some special character,
@@ -76,7 +76,7 @@ class HttpScrape extends Scrape with HttpTrackerBase {
   }
 
   @override
-  Future scrape(Map options) async {
+  Future scrape(Map<String, dynamic> options) async {
     // 目前scrape是不需要提供访问参数的
     try {
       var re = await httpGet(options);

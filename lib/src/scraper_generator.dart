@@ -3,7 +3,7 @@ import 'utils.dart';
 import 'tracker/tracker_base.dart';
 
 abstract class ScraperGenerator {
-  Scrape createScrape(Uri announceUrl);
+  Scrape? createScrape(Uri announceUrl);
 
   factory ScraperGenerator.base() {
     return BaseScraperGenerator();
@@ -12,8 +12,7 @@ abstract class ScraperGenerator {
 
 class BaseScraperGenerator implements ScraperGenerator {
   @override
-  Scrape createScrape(Uri announceUrl) {
-    if (announceUrl == null) return null;
+  Scrape? createScrape(Uri announceUrl) {
     if (announceUrl.isScheme('https') || announceUrl.isScheme('http')) {
       // 将announce url转成scrape url，如果announce不具备scrape url条件，将返回null
       var url = transformToScrapeUrl(announceUrl.toString());
