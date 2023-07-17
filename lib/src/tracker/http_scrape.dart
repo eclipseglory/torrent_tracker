@@ -23,11 +23,11 @@ class HttpScrape extends Scrape with HttpTrackerBase {
     var infos = [];
     // infohash value usually can not be decode by utf8, because some special character,
     // so I transform them with String.fromCharCodes , when transform them to the query component, use latin1 encoding
-    infoHashSet.forEach((infoHash) {
+    for (var infoHash in infoHashSet) {
       var query = Uri.encodeQueryComponent(String.fromCharCodes(infoHash),
           encoding: latin1);
       infos.add(query);
-    });
+    }
     return {'info_hash': infos};
   }
 

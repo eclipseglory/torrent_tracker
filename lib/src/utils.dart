@@ -15,11 +15,11 @@ String? transformToScrapeUrl(String url) {
   if (startIndex == -1) return null;
   var i = startIndex + 'announce'.length;
   if (i >= url.length) {
-    return (url.substring(0, startIndex) + 'scrape');
+    return ('${url.substring(0, startIndex)}scrape');
   } else {
     var next = url.substring(i, i + 1);
     if (next == '?' || next == '/' || next == '\\') {
-      return (url.substring(0, startIndex) + 'scrape' + url.substring(i));
+      return ('${url.substring(0, startIndex)}scrape${url.substring(i)}');
     }
   }
   return null;

@@ -53,8 +53,9 @@ class HttpTracker extends Tracker with HttpTrackerBase {
   }
 
   @override
-  Future<PeerEvent?> announce(String event, Map<String, dynamic> options) {
-    _currentEvent = event; // 修改当前event，stop和complete也会调用该方法，所以要在这里进行记录当前event类型
+  Future<PeerEvent?> announce(String eventType, Map<String, dynamic> options) {
+    _currentEvent =
+        eventType; // 修改当前event，stop和complete也会调用该方法，所以要在这里进行记录当前event类型
     return httpGet<PeerEvent>(options);
   }
 
@@ -175,21 +176,25 @@ class HttpTracker extends Tracker with HttpTrackerBase {
       if (type == InternetAddressType.IPv6) {
         try {
           var peers = CompactAddress.parseIPv6Addresses(value);
-          peers.forEach((peer) => event.addPeer(peer));
+          for (var peer in peers) {
+            event.addPeer(peer);
+          }
         } catch (e) {
           //
         }
       } else if (type == InternetAddressType.IPv4) {
         try {
           var peers = CompactAddress.parseIPv4Addresses(value);
-          peers.forEach((peer) => event.addPeer(peer));
+          for (var peer in peers) {
+            event.addPeer(peer);
+          }
         } catch (e) {
           //
         }
       }
     } else {
       if (value is List) {
-        value.forEach((peer) {
+        for (var peer in value) {
           var ip = peer['ip'];
           var port = peer['port'];
           var address = InternetAddress.tryParse(ip);
@@ -201,7 +206,7 @@ class HttpTracker extends Tracker with HttpTrackerBase {
                   error: e, name: runtimeType.toString());
             }
           }
-        });
+        }
       }
     }
   }

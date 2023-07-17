@@ -125,9 +125,7 @@ class TorrentAnnounceTracker {
     _announceErrorHandlers.clear();
     _announceStartHandlers.clear();
     _announceRetryTimers.forEach((key, record) {
-      if (record != null) {
-        record[0].cancel();
-      }
+      record[0].cancel();
     });
     _announceRetryTimers.clear();
   }
@@ -176,9 +174,9 @@ class TorrentAnnounceTracker {
       int maxRetryTimes = 3}) {
     if (isDisposed) return;
 
-    announces.forEach((announce) {
+    for (var announce in announces) {
       runTracker(announce, infoHash, event: event, force: forceStop);
-    });
+    }
   }
 
   /// Restart all trackers(which is record with this class instance , some of the trackers
@@ -242,8 +240,8 @@ class TorrentAnnounceTracker {
       tracker.dispose('NO MORE RETRY ($times/$maxRetryTime)');
       return;
     }
-    var re_time = (_retryAfter * pow(2, times) as int);
-    var timer = Timer(Duration(seconds: re_time), () {
+    var reTime = (_retryAfter * pow(2, times) as int);
+    var timer = Timer(Duration(seconds: reTime), () {
       if (tracker.isDisposed || isDisposed) return;
       _unHookTracker(tracker);
       var url = tracker.announceUrl;
@@ -254,9 +252,9 @@ class TorrentAnnounceTracker {
     });
     times++;
     _announceRetryTimers[tracker] = [timer, times];
-    _announceErrorHandlers.forEach((f) {
+    for (var f in _announceErrorHandlers) {
       Timer.run(() => f(tracker, error));
-    });
+    }
   }
 
   void _fireAnnounceOver(Tracker tracker, int time) {
@@ -264,9 +262,9 @@ class TorrentAnnounceTracker {
     if (record != null) {
       record[0].cancel();
     }
-    _announceOverHandlers.forEach((f) {
+    for (var f in _announceOverHandlers) {
       Timer.run(() => f(tracker, time));
-    });
+    }
   }
 
   void _firePeerEvent(Tracker tracker, PeerEvent? event) {
@@ -274,9 +272,9 @@ class TorrentAnnounceTracker {
     if (record != null) {
       record[0].cancel();
     }
-    _peerEventHandlers.forEach((f) {
+    for (var f in _peerEventHandlers) {
       Timer.run(() => f(tracker, event));
-    });
+    }
   }
 
   void _fireTrackerDisposed(Tracker tracker, dynamic reason) {
@@ -285,15 +283,15 @@ class TorrentAnnounceTracker {
       record[0].cancel();
     }
     _trackers.remove(tracker.announceUrl);
-    _trackerDisposedHandlers.forEach((f) {
+    for (var f in _trackerDisposedHandlers) {
       Timer.run(() => f(tracker, reason));
-    });
+    }
   }
 
   void _fireAnnounceStart(Tracker tracker) {
-    _announceStartHandlers.forEach((f) {
+    for (var f in _announceStartHandlers) {
       Timer.run(() => f(tracker));
-    });
+    }
   }
 
   void _hookTrakcer(Tracker tracker) {

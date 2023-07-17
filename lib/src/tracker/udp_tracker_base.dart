@@ -215,10 +215,10 @@ mixin UDPTrackerBase {
   void _sendMessage(Uint8List message, List<CompactAddress> addresses) {
     if (isClosed) return;
     var success = false;
-    addresses.forEach((element) {
+    for (var element in addresses) {
       var bytes = _socket?.send(message, element.address, element.port);
       if (bytes != 0) success = true;
-    });
+    }
     if (!success) {
       Timer.run(() => _sendMessage(message, addresses));
     }

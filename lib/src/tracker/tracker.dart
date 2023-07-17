@@ -299,50 +299,50 @@ abstract class Tracker {
   }
 
   void _fireAnnounceStartEvent() {
-    _announceStartHandlers.forEach((handler) {
+    for (var handler in _announceStartHandlers) {
       Timer.run(() => handler(this));
-    });
+    }
   }
 
   void _firePeerEvent(PeerEvent event) {
-    _peerEventHandlers.forEach((handler) {
+    for (var handler in _peerEventHandlers) {
       Timer.run(() => handler(this, event));
-    });
+    }
   }
 
   void _fireStopEvent(PeerEvent? event) {
-    _stopEventHandlers.forEach((handler) {
+    for (var handler in _stopEventHandlers) {
       Timer.run(() => handler(this, event));
-    });
+    }
   }
 
   void _fireCompleteEvent(PeerEvent? event) {
-    _completeEventHandlers.forEach((handler) {
+    for (var handler in _completeEventHandlers) {
       Timer.run(() => handler(this, event));
-    });
+    }
   }
 
   void _fireAnnounceError(dynamic error) {
-    _announceErrorHandlers.forEach((handler) {
+    for (var handler in _announceErrorHandlers) {
       Timer.run(() => handler(this, error));
-    });
+    }
   }
 
   void _fireAnnounceOver(int intervalTime) {
-    _announceOverHandlers.forEach((handler) {
+    for (var handler in _announceOverHandlers) {
       Timer.run(() => handler(this, intervalTime));
-    });
+    }
   }
 
   void _fireDisposed([dynamic reason]) {
-    _disposeEventHandlers.forEach((handler) {
+    for (var handler in _disposeEventHandlers) {
       Timer.run(() => handler(this, reason));
-    });
+    }
   }
 
   @override
-  bool operator ==(b) {
-    if (b is Tracker) return b.id == id;
+  bool operator ==(other) {
+    if (other is Tracker) return other.id == id;
     return false;
   }
 

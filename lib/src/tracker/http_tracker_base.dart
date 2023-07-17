@@ -71,14 +71,16 @@ mixin HttpTrackerBase {
     if (parameters == null || parameters.isEmpty) {
       throw Exception('Query params can not be empty');
     }
-    var _queryStr = parameters.keys.fold<String>('', (previousValue, key) {
+    var queryStr = parameters.keys.fold<String>('', (previousValue, key) {
       var values = parameters[key];
       if (values is String) {
         previousValue += '&$key=$values';
         return previousValue;
       }
       if (values is List) {
-        values.forEach((value) => previousValue += '&$key=$value');
+        for (var value in values) {
+          previousValue += '&$key=$value';
+        }
         return previousValue;
       }
       return previousValue;
@@ -87,7 +89,7 @@ mixin HttpTrackerBase {
     var str = _rawUrl;
     str = '${url.origin}${url.path}?';
     if (!str.contains('?')) str += '?';
-    str += _queryStr;
+    str += queryStr;
     return str;
   }
 

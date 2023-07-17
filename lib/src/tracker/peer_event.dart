@@ -63,9 +63,9 @@ class PeerEvent extends TrackerEventBase {
     str += warning == null ? '' : 'WARNING:$warning \n';
     if (peers.isNotEmpty) {
       str += 'Peers List(${peers.length}): \n';
-      peers.forEach((peer) {
+      for (var peer in peers) {
         str += '$peer \n';
-      });
+      }
     } else {
       str += 'Peers List is empty \n';
     }

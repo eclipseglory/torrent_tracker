@@ -28,13 +28,13 @@ class UDPTracker extends Tracker with UDPTrackerBase {
     try {
       var ips = await InternetAddress.lookup(announceUrl.host);
       var l = <CompactAddress>[];
-      ips.forEach((element) {
+      for (var element in ips) {
         try {
           l.add(CompactAddress(element, announceUrl.port));
         } catch (e) {
           //
         }
-      });
+      }
       return l;
     } catch (e) {
       return null;
@@ -86,14 +86,14 @@ class UDPTracker extends Tracker with UDPTrackerBase {
     try {
       if (type == InternetAddressType.IPv4) {
         var list = CompactAddress.parseIPv4Addresses(ips);
-        list.forEach((c) {
+        for (var c in list) {
           event.addPeer(c);
-        });
+        }
       } else if (type == InternetAddressType.IPv6) {
         var list = CompactAddress.parseIPv4Addresses(ips);
-        list.forEach((c) {
+        for (var c in list) {
           event.addPeer(c);
-        });
+        }
       }
     } catch (e) {
       // 容错

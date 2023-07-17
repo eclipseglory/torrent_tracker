@@ -29,9 +29,9 @@ class UDPScrape extends Scrape with UDPTrackerBase {
     list.addAll(transcationId!); // 会话ID
     var infos = infoHashSet;
     if (infos.isEmpty) throw Exception('infohash 不能位空');
-    infos.forEach((info) {
+    for (var info in infos) {
       list.addAll(info);
-    });
+    }
     return Uint8List.fromList(list);
   }
 
@@ -72,13 +72,13 @@ class UDPScrape extends Scrape with UDPTrackerBase {
     try {
       var ips = await InternetAddress.lookup(scrapeUrl.host);
       var l = <CompactAddress>[];
-      ips.forEach((element) {
+      for (var element in ips) {
         try {
           l.add(CompactAddress(element, scrapeUrl.port));
         } catch (e) {
           //
         }
-      });
+      }
       return l;
     } catch (e) {
       return null;

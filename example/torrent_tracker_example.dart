@@ -85,6 +85,6 @@ class SimpleProvider implements AnnounceOptionsProvider {
 String generatePeerId() {
   var r = randomBytes(9);
   var base64Str = base64Encode(r);
-  var id = '-MURLIN-' + base64Str;
+  var id = '-MURLIN-$base64Str';
   return id;
 }

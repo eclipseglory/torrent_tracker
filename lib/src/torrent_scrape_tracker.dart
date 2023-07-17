@@ -39,10 +39,10 @@ class TorrentScrapeTracker {
 
   List<Scrape> addScrapes(Iterable<Uri> announces, Uint8List infoHashBuffer) {
     var l = <Scrape>[];
-    announces.forEach((url) {
+    for (var url in announces) {
       var s = addScraper(url, infoHashBuffer);
       if (s != null) l.add(s);
-    });
+    }
     return l;
   }
 
@@ -55,9 +55,9 @@ class TorrentScrapeTracker {
     var scrapeSet = _file2scrapeMap[infoHash];
     if (scrapeSet != null && scrapeSet.isNotEmpty) {
       var futures = <Future>[];
-      scrapeSet.forEach((scrape) {
+      for (var scrape in scrapeSet) {
         futures.add(scrape.scrape({}));
-      });
+      }
       return Stream.fromFutures(futures);
     }
     return Stream.empty();
