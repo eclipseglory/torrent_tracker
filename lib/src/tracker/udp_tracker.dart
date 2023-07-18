@@ -51,8 +51,10 @@ class UDPTracker extends Tracker with UDPTrackerBase {
   Uint8List generateSecondTouchMessage(Uint8List connectionId, Map options) {
     var list = <int>[];
     list.addAll(connectionId);
-    list.addAll(ACTION_ANNOUNCE); // Action的类型，目前是announce,即1
-    list.addAll(transcationId!); // 会话ID
+
+    list.addAll(
+        ACTION_ANNOUNCE); // The type of Action is currently 'announce', which is represented as 1.
+    list.addAll(transcationId!); // Session id
     list.addAll(infoHashBuffer);
     list.addAll(utf8.encode(options['peerId']));
     list.addAll(num2Uint64List(options['downloaded']));
@@ -60,11 +62,12 @@ class UDPTracker extends Tracker with UDPTrackerBase {
     list.addAll(num2Uint64List(options['uploaded']));
     var event = EVENTS[currentEvent];
     event ??= 0;
-    list.addAll(num2Uint32List(event)); // 这里是event类型
-    list.addAll(num2Uint32List(0)); // 这里是ip地址，默认0
-    list.addAll(num2Uint32List(0)); // 这里是keym,默认0
-    list.addAll(num2Uint32List(options['numwant'])); // 这里是num_want,默认-1
-    list.addAll(num2Uint16List(options['port'])); // 这里是TCP的端口
+    list.addAll(num2Uint32List(event)); // This is the event type.
+    list.addAll(num2Uint32List(0)); // This is the IP address, default is 0
+    list.addAll(num2Uint32List(0)); // This is key, with the default value of 0.
+    list.addAll(num2Uint32List(
+        options['numwant'])); // This is num_want, with the default value of -1.
+    list.addAll(num2Uint16List(options['port'])); // This is the TCP port.
     return Uint8List.fromList(list);
   }
 
@@ -72,7 +75,7 @@ class UDPTracker extends Tracker with UDPTrackerBase {
   dynamic processResponseData(
       Uint8List data, int action, Iterable<CompactAddress> addresses) {
     if (data.length < 20) {
-      // 数据不正确
+      // The data is incorrect
       throw Exception('announce data is wrong');
     }
     var view = ByteData.view(data.buffer);
@@ -96,8 +99,8 @@ class UDPTracker extends Tracker with UDPTrackerBase {
         }
       }
     } catch (e) {
-      // 容错
-      log('解析peer ip 出错 : $ips , ${ips.length}',
+      // Error tolerance
+      log('Error parsing peer IP : $ips , ${ips.length}',
           name: runtimeType.toString(), error: e);
     }
     return event;

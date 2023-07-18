@@ -55,29 +55,28 @@ class HttpTracker extends Tracker with HttpTrackerBase {
   @override
   Future<PeerEvent?> announce(String eventType, Map<String, dynamic> options) {
     _currentEvent =
-        eventType; // 修改当前event，stop和complete也会调用该方法，所以要在这里进行记录当前event类型
+        eventType; // save the current event, stop and complete will also call this method, so the current event type should be recorded here
     return httpGet<PeerEvent>(options);
   }
 
   ///
-  /// 创建访问announce的URL string,
-  /// 更多信息可以访问[HTTP/HTTPS Tracker Request Parameters](https://wiki.theory.org/index.php/BitTorrentSpecification#Tracker_Request_Parameters)
+  /// Create an access URL string for 'announce'.
+  /// For more information, visit [HTTP/HTTPS Tracker Request Parameters](https://wiki.theory.org/index.php/BitTorrentSpecification#Tracker_Request_Parameters)
   ///
-  /// 关于访问的query参数：
-  /// - compact : 我一直设位1
-  /// - downloaded : 已经下载的字节数
-  /// - uploaded : 上传字节数
-  /// - left : 剩余未下载的字节数
-  /// - numwant : 可选项。这里默认值是50，最好不要设为-1，访问一些地址对方会认为是非法数字
-  /// - info_hash : 必填项。来自torrent文件。这里要注意，这里没有使用 *Uri* 的urlencode来获取，
-  /// 是因为该类在生成query string的时候采用的是UTF-8编码,这导致无法具有一些特殊文字的info_hash无法正确编码，所以这里手动处理一下。
-  /// - port ： 必填项。TCP监听端口
-  /// - peer_id ：必填项。随机生成的一个20长度的字符串，要采用query string编码，但目前我使用的都是数字和英文字母，所以直接使用
-  /// - event ：必须是stopped,started,completed中的一个。按照协议来做，第一次访问必须是started。如果不指定，对方会认为是一次普通的announce访问
-  /// - trackerid : 可选项，如果上一次请求包含了trackerid，那就应该设置。有些response里会包含tracker id。有些response会携带trackerid，这时候我就会设置该字段。
-  /// - ip ：可选项
-  /// - key ：可选项
-  /// - no_peer_id : 如果compact指定，则该字段会被忽略。我在这里的compact一直都是1，所以就没有设该值
+  /// Regarding the query parameters for access:
+  /// - compact: I keep setting bit 1.
+  /// - downloaded: The number of bytes downloaded.
+  /// - uploaded: The number of bytes uploaded.
+  /// - left: The number of bytes left to download.
+  /// - numwant: Optional. The default value here is 50, it's better not to set it to -1 as some addresses may consider it an illegal number.
+  /// - info_hash: Required. Comes from the torrent file. Note that we don't use Uri's urlencode to obtain it because this class uses UTF-8 encoding when generating the query string, which causes issues with correctly encoding some special characters in the info_hash. So here, we handle it manually.
+  /// - port: Required. TCP listening port.
+  /// - peer_id: Required. A randomly generated string of 20 characters. It should be query string encoded, but currently, I use only digits and alphabets, so I directly use it.
+  /// - event: Must be one of "stopped," "started," or "completed." According to the protocol, the first visit must be "started." If not specified, the other party will consider it a regular announce visit.
+  /// - trackerid: Optional. If the previous request contained a trackerid, it should be set. Some responses may include a tracker ID, and if so, I will set this field.
+  /// - ip: Optional.
+  /// - key: Optional.
+  /// - no_peer_id: If compact is specified, this field will be ignored. I always set compact to 1 here, so I don't set this value.
   ///
   @override
   Map<String, String> generateQueryParameters(Map<String, dynamic> options) {
@@ -102,8 +101,8 @@ class HttpTracker extends Tracker with HttpTrackerBase {
     }
     if (currentTrackerId != null) params['trackerid'] = currentTrackerId!;
     // params['no_peer_id']
-    // params['ip'] ; 可选
-    // params['key'] ; 可选
+    // params['ip'] ; optional
+    // params['key'] ; optional
     return params;
   }
 

@@ -5,38 +5,45 @@ import 'dart:typed_data';
 
 import 'package:dartorrent_common/dartorrent_common.dart';
 
-/// 第一次连接的时候，connection id是自己设置的，所有文档都提到使用该数字，说它是个magic number
+/// During the first connection, the connection ID is set by yourself, and all
+/// documents mention using this number, referring to it as a "magic number."
 const START_CONNECTION_ID_NUMER = 0x41727101980;
 
-/// 连接起始的connection id，是个固定值 0x41727101980
+/// The starting connection ID is a fixed value: 0x41727101980.
 const START_CONNECTION_ID = [0, 0, 4, 23, 39, 16, 25, 128];
 const ACTION_CONNECT = [0, 0, 0, 0];
 const ACTION_ANNOUNCE = [0, 0, 0, 1];
 const ACTION_SCRAPE = [0, 0, 0, 2];
 const ACTION_ERROR = [0, 0, 0, 3];
 
-/// 套接字接收消息的超时时间，15秒
+/// The socket's receive message timeout is set to 15 seconds.
 const TIME_OUT = Duration(seconds: 15);
 
 const EVENTS = <String, int>{'completed': 1, 'started': 2, 'stopped': 3};
 
 ///
-/// announce和scrapt的访问步骤完全一致，只是发送和返回数据不同，所以这里做一个mixin，
-/// 具有UDP连接到host的功能，tracker和scrapter各自实现需要发送数据以及处理返回数据即可
+/// The access steps for announce and scrape are exactly the same;
+/// only the sent and returned data are different. Therefore, we create a mixin
+/// here that contains the functionality of establishing a UDP connection to the
+/// host. The tracker and scraper will each implement the logic for sending data
+/// and processing returned data accordingly.
+///
 mixin UDPTrackerBase {
-  /// UDP 套接字。
+  /// UDP socket
   ///
-  /// 基本上一次连接-响应过后就会被关闭。第二次连接再创建新的
+  /// Basically, once the connection is made, it is closed after the response.
+  /// The second connection creates a new one
   RawDatagramSocket? _socket;
 
-  /// 会话ID。长度为4的一组bytebuffer，随机生成的
+  /// Session ID. A group of 4 bytes represented as a byte buffer, randomly generated.
   List<int>? _transcationId;
 
-  /// 连接ID。在第一次发送消息到remote后，remote会返回一个connection id，第二次发送消息
-  /// 需要携带该ID
+  /// Connection ID. After sending the first message to the remote, the remote
+  ///  will return a connection ID, which needs to be carried when sending the
+  ///  second message.
   Uint8List? _connectionId;
 
-  /// 远程URL
+  /// Remote URL
   // Uri get uri;
 
   Future<List<CompactAddress>?> get addresses;
@@ -45,30 +52,30 @@ mixin UDPTrackerBase {
 
   bool get isClosed => _closed;
 
-  /// 获取当前transcation id，如果有就返回，表示当前通信还未完结。如果没有就重新生成
+  /// Obtain the current transcation ID, and return it if there is, indicating that the current communication has not ended. If not, regenerate
   List<int>? get transcationId {
     _transcationId ??= _generateTranscationId();
     return _transcationId;
   }
 
-  /// 将trancation id 转成数字
+  /// Convert the trancation ID to a number
   int get transcationIdNum {
     return ByteData.view(Uint8List.fromList(transcationId!).buffer)
         .getUint32(0);
   }
 
-  /// 生成一个随机4字节的bytebuffer
+  /// Generate a random 4-byte buffer
   List<int> _generateTranscationId() {
     return randomBytes(4);
   }
 
   int maxConnectRetryTimes = 3;
 
-  /// 与Remote通讯的第一次连接
   ///
-  /// Announce 和 Scrape通讯的时候，都必须要走这第一步，是固定的。
+  /// The first connection to the Remote communication
+  /// When announcing and scrape communicate, this first step must be taken, which is fixed.
+  /// The parameter completer is an instance of 'Completer'. Used to intercept exceptions that occur and intercept them through completeError
   ///
-  /// 参数completer是一个`Completer`实例。用于截获发生的异常，并通过completeError截获
   void _connect(
       Map options, List<CompactAddress> address, Completer completer) async {
     if (isClosed) {
@@ -76,7 +83,7 @@ mixin UDPTrackerBase {
       return;
     }
     var list = <int>[];
-    list.addAll(START_CONNECTION_ID); //这是个magic id
+    list.addAll(START_CONNECTION_ID); //This is a magic ID
     list.addAll(ACTION_CONNECT);
     list.addAll(transcationId!);
     var messageBytes = Uint8List.fromList(list);
@@ -89,7 +96,7 @@ mixin UDPTrackerBase {
     }
   }
 
-  /// 和Remote通信的入口函数。返回一个Future
+  /// An entry function that communicates with Remote. Returns a Future
   Future<T?> contactAnnouncer<T>(Map options) async {
     if (isClosed) return null;
     var completer = Completer<T>();
@@ -122,7 +129,7 @@ mixin UDPTrackerBase {
       if (!completer.isCompleted) completer.completeError('Socket closed');
     });
 
-    // 第一步，连接对方
+    // Step 1: Connect to the other party
     _connect(options, adds, completer);
     return completer.future;
   }
@@ -131,32 +138,35 @@ mixin UDPTrackerBase {
 
   void handleSocketError(e);
 
-  /// 处理一次通信最终从remote获得的数据.
+  /// Process the data obtained from the remote after one communication.
   ///
   dynamic processResponseData(
       Uint8List data, int action, Iterable<CompactAddress> addresses);
 
   ///
-  /// 与announce和scrape通信的时候，在第一次连接成功后，第二次发送的数据是不同的。
-  /// 这个方法就是让子类分别实现annouce和scrape不同的发送数据
+  /// When communicating with announce and scrape, the data sent in the second
+  /// communication is different after the first successful connection.
+  /// This method is designed for subclasses to implement different data sending
+  /// logic for announce and scrape
+  ///
   Uint8List generateSecondTouchMessage(Uint8List connectionId, Map options);
 
   ///
-  /// 第一次连接成功后，发送第二次信息
+  /// After the first connection is successful, send the second message
   Future<void> _announce(Uint8List connectionId, Map options,
       List<CompactAddress> addresses) async {
     var message = generateSecondTouchMessage(connectionId, options);
     if (message.isEmpty) {
-      throw '发送数据不能为空';
+      throw 'The sent data cannot be empty';
     } else {
       _sendMessage(message, addresses);
     }
   }
 
-  /// 处理从套接字处读出到的信息。
+  /// Process the information read from the socket.
   ///
-  /// 该方法并不会直接去处理Remote返回的最终消息，而且固定了整个通信流程。
-  /// 该方法会去处理在第一次发送信息后收到消息，然后到接收到第二次消息的整个过程
+  /// This method does not directly handle the final message returned from the Remote, but it fixes the entire communication flow.
+  /// This method processes the entire process from sending the first message and receiving the response to receiving the second message.
   void _processAnnounceResponseData(Uint8List data, Map options,
       List<CompactAddress> address, Completer completer) async {
     if (isClosed) {
@@ -167,13 +177,15 @@ mixin UDPTrackerBase {
     var tid = view.getUint32(4);
     if (tid == transcationIdNum) {
       var action = view.getUint32(0);
-      // 表明连接成功，可以进行announce
+      // Indicates a successful connection, and announce can be performed.
       if (action == 0) {
-        _connectionId = data.sublist(8, 16); // 返回信息的第8-16位是下次连接的connection id
-        await _announce(_connectionId!, options, address); // 继续，不要停
+        _connectionId = data.sublist(8,
+            16); //The 8th to 16th bits of the returned information are the connection ID for the next connection
+        await _announce(
+            _connectionId!, options, address); // Continue, don't stop
         return;
       }
-      // 发生错误
+      // An error occurred.
       if (action == 3) {
         var errorMsg = 'Unknown error';
         try {
@@ -187,7 +199,7 @@ mixin UDPTrackerBase {
         close();
         return;
       }
-      // announce获得返回结果
+      // Announce receives the returned result
       try {
         var result = processResponseData(data, action, address);
         completer.complete(result);
@@ -203,7 +215,7 @@ mixin UDPTrackerBase {
     }
   }
 
-  /// 关闭连接以及清楚设置
+  /// Close the connection and clear settings
   Future<void> close() {
     _closed = true;
     _socket?.close();
@@ -211,7 +223,7 @@ mixin UDPTrackerBase {
     return Future.wait([]);
   }
 
-  /// 发送数据包到指定的ip地址
+  /// Send a data packet to a specific IP address
   void _sendMessage(Uint8List message, List<CompactAddress> addresses) {
     if (isClosed) return;
     var success = false;

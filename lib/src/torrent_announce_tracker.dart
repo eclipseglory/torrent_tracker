@@ -59,8 +59,9 @@ class TorrentAnnounceTracker {
   ///     File downloadedFile;
   ///
   ///     Future getOptions(Uri uri,String infoHash) async{
-  ///         // 可以根据uri以及infoHash来确定需要返回的参数。也就是说，实际上这个provider可以在多个
-  ///         // TorrentTracker一起使用。
+  ///         // It can determine the required parameters to return based on the
+  ///         // URI and infoHash. In other words, this provider can be used
+  ///         // together with multiple TorrentTrackers.
   ///         var someport;
   ///         if(infoHash..... ){
   ///             someport = ... // port depends infohash or uri...

@@ -63,9 +63,10 @@ mixin HttpTrackerBase {
 
   bool get isClosed => _closed;
 
-  /// 创建访问URL。
+  /// Create an access URL.
   ///
-  /// 其中子类必须实现url属性以及generateQueryParameters方法，才能正确发起访问
+  /// Subclasses must implement the 'url' property and
+  /// the 'generateQueryParameters' method to correctly initiate the access
   String _createAccessURL(Map<String, dynamic> options) {
     var parameters = generateQueryParameters(options);
     if (parameters == null || parameters.isEmpty) {
@@ -127,8 +128,10 @@ mixin HttpTrackerBase {
   }
 
   ///
-  /// Http get访问。返回Future，如果访问出现问题，比如响应码不是200，超时，数据接收出问题，URL
-  /// 解析错误等，都会被Future的catchError截获。
+  /// HTTP GET request. Returns a Future. If there is an issue with the access,
+  /// such as a non-200 response code, timeout, problems with data reception,
+  /// URL parsing errors, etc., they will all be caught by the Future's
+  /// catchError.
   ///
   Future<T?> httpGet<T>(Map<String, dynamic> options) async {
     if (isClosed) {

@@ -14,7 +14,9 @@ class BaseScraperGenerator implements ScraperGenerator {
   @override
   Scrape? createScrape(Uri announceUrl) {
     if (announceUrl.isScheme('https') || announceUrl.isScheme('http')) {
-      // 将announce url转成scrape url，如果announce不具备scrape url条件，将返回null
+      // Convert the announce URL to a scrape URL.
+      // If the announce does not have the necessary conditions for a scrape URL
+      //, it will return null.
       var url = transformToScrapeUrl(announceUrl.toString());
       if (url == null) return null;
       return HttpScrape(Uri.parse(url));

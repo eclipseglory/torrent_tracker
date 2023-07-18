@@ -13,7 +13,7 @@ const EVENT_COMPLETED = 'completed';
 const EVENT_STOPPED = 'stopped';
 
 ///
-/// 一个抽象类，用于访问Announce获取数据。
+/// An abstract class for accessing Announce to obtain data.
 ///
 /// ```
 abstract class Tracker {
@@ -29,10 +29,11 @@ abstract class Tracker {
   /// server url;
   final Uri announceUrl;
 
-  /// 循环访问announce url的间隔时间，单位秒，默认值30分钟
+  /// The interval for looping through the announce url, in seconds,
+  /// the default value is 30 minutes
   final int DEFAULT_INTERVAL_TIME = 30 * 60; // 30 minites
 
-  /// 循环scrape数据的间隔时间，单位秒，默认1分钟
+  /// The interval for looping scrape data, in seconds, defaults to 1 minute
   int announceScrape = 1 * 60;
 
   final Set<void Function(Tracker source, PeerEvent event)> _peerEventHandlers =
@@ -82,7 +83,7 @@ abstract class Tracker {
   bool get isRunning => _running;
 
   ///
-  /// 开始循环发起announce访问。
+  /// Start a loop to initiate an announce visit.
   ///
   Future<bool> start() async {
     if (isDisposed) throw Exception('This tracker was disposed');
@@ -92,7 +93,7 @@ abstract class Tracker {
   }
 
   ///
-  /// 重新开始循环发起announce访问。
+  /// Restart the loop to initiate the announce visit.
   ///
   Future<bool> restart() async {
     if (isDisposed) throw Exception('This tracker was disposed');
@@ -102,11 +103,15 @@ abstract class Tracker {
   }
 
   ///
-  /// 该方法会一直循环Announce，直到被disposed。
-  /// 每次循环访问的间隔时间是announceInterval，子类在实现announce方法的时候返回值需要加入interval值，
-  /// 这里会比较返回值和现有值，如果不同会停止当前的Timer并重新生成一个新的循环间隔Timer
+  /// The method loops through Announce until it is disposed.
+  /// The interval between each iteration is announceInterval, and the subclass
+  /// needs to add the interval value to the return value when implementing
+  /// the announce method.
+  /// The return value is compared to the existing value, and if it is different
+  /// ,the current Timer is stopped and a new loop-interval timer is regenerated
+  /// If announce throws an exception, the loop does not stop
+  /// unless [errorOrCancel] sets the bit 'true'
   ///
-  /// 如果announce抛出异常，该循环不会停止,除非[errorOrCancel]设置位 `true`
   Future<bool> _intervalAnnounce(String event) async {
     if (isDisposed) {
       _running = false;
@@ -185,13 +190,12 @@ abstract class Tracker {
     _announceTimer = null;
   }
 
+  /// When abruptly stopped, this method needs to be called to notify 'announce'
+  /// The method calls 'announce' once with the parameter bit 'stopped'.
+  /// [force] is to force off the identity, with a default value of 'false'.
+  /// If 'true', the method will not call the 'announce' method
+  /// Send a 'stopped' request and return a 'null' directly.
   ///
-  /// 当突然停止需要调用该方法去通知`announce`。
-  ///
-  /// 该方法会调用一次`announce`，参数位`stopped`。
-  ///
-  /// [force] 是强制关闭标识，默认值为`false`。 如果为`true`，刚方法不会去调用`announce`方法
-  /// 发送`stopped`请求，而是直接返回一个`null`
   Future<PeerEvent?> stop([bool force = false]) async {
     if (isDisposed) return null;
     stopIntervalAnnounce();
@@ -212,9 +216,10 @@ abstract class Tracker {
   }
 
   ///
-  /// 当完成下载后需要调用该方法去通知announce。
+  /// When the download is complete, you need to call this method to notify
+  /// announce.
+  /// This method calls announce once, and the parameter bit is completed.
   ///
-  /// 该方法会调用一次announce，参数位completed。
   Future<PeerEvent?> complete() async {
     if (isDisposed) return null;
     stopIntervalAnnounce();
@@ -231,14 +236,19 @@ abstract class Tracker {
   }
 
   ///
-  /// 访问announce url获取数据。
+  /// Visit the announce URL for data.
+  /// Call the method to initiate a visit to the Announce URL,
+  /// it returns a Future. If successful, it will return the data as expected.
+  /// However, if any failures occur during the process, such as decoding errors
+  /// or timeouts, exceptions will be thrown.
+  /// The parameter eventType must be one of started, stopped, completed, and
+  /// can be null.
+  /// The returned data should be a [PeerEvent] object.
+  /// If the 'interval' property of this object is not empty and is different
+  /// from the current loop interval time, the Tracker will stop
+  /// the current Timer and create a new Timer with the interval time set to
+  /// the value from the returned object's 'interval'.
   ///
-  /// 调用方法即可开始一次对Announce Url的访问，返回是一个Future，如果成功，则返回正常数据，如果访问过程中
-  /// 有任何失败，比如解码失败、访问超时等，都会抛出异常。
-  /// 参数eventType必须是started,stopped,completed中的一个，可以是null。
-  ///
-  /// 返回的数据应该是一个[PeerEvent]对象。如果该对象interval属性值不为空，并且该属性值和当前的循环间隔时间
-  /// 不同，那么Tracker就会停止当前的Timer并重新创建一个Timer，间隔时间设置为返回对象中的interval值
   Future<PeerEvent?> announce(String eventType, Map<String, dynamic> options);
 
   bool onAnnounceError(void Function(Tracker source, dynamic error) handler) {
