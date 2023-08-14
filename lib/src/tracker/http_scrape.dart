@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:developer';
 import 'dart:typed_data';
 
-import 'package:dartorrent_common/dartorrent_common.dart';
-import 'package:bencode_dart/bencode_dart.dart' as bencode;
+import 'package:dtorrent_common/dtorrent_common.dart';
+import 'package:b_encode_decode/b_encode_decode.dart' as bencode;
 
 import 'scrape_event.dart';
 import 'http_tracker_base.dart';

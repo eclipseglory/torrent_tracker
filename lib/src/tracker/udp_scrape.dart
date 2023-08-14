@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:dartorrent_common/dartorrent_common.dart';
+import 'package:dtorrent_common/dtorrent_common.dart';
 
 import 'scrape_event.dart';
 import 'udp_tracker_base.dart';

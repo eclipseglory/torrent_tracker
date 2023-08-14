@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:torrent_tracker/src/tracker/peer_event.dart';
+import 'package:dtorrent_tracker/src/tracker/peer_event.dart';
 
 import 'tracker/tracker.dart';
 import 'tracker_generator.dart';

@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
-import 'package:dartorrent_common/dartorrent_common.dart';
+import 'package:dtorrent_common/dtorrent_common.dart';
 
-import 'package:torrent_tracker/torrent_tracker.dart';
-import 'package:torrent_model/torrent_model.dart';
+import 'package:dtorrent_tracker/dtorrent_tracker.dart';
+import 'package:dtorrent_parser/dtorrent_parser.dart';
 
 void main() async {
   var torrent = await Torrent.parse('example/test.torrent');
