@@ -35,3 +35,6 @@
 
 - Migrate to null safety
 - Some linting and code style changes
+
+## 1.3.15
+- pub.dev fixes

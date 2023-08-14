@@ -31,7 +31,7 @@ abstract class Tracker {
 
   /// The interval for looping through the announce url, in seconds,
   /// the default value is 30 minutes
-  final int DEFAULT_INTERVAL_TIME = 30 * 60; // 30 minites
+  final int defaultIntervalTime = 30 * 60; // 30 minites
 
   /// The interval for looping scrape data, in seconds, defaults to 1 minute
   int announceScrape = 1 * 60;
@@ -144,7 +144,7 @@ abstract class Tracker {
       }
     }
 
-    interval ??= DEFAULT_INTERVAL_TIME;
+    interval ??= defaultIntervalTime;
     _announceTimer?.cancel();
     _announceTimer =
         Timer(Duration(seconds: interval), () => _intervalAnnounce(event));
