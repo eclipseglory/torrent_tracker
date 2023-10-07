@@ -13,3 +13,6 @@ build/
 doc/api/
 
 .vscode
+
+*.iml
+pubspec_overrides.yaml
